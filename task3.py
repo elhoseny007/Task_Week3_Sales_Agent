@@ -1,12 +1,11 @@
 import os
-os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
-import os
 import json
 import time
 import asyncio
 import sys
 from contextlib import AsyncExitStack
 from typing import Optional
+
 import pandas as pd
 import streamlit as st
 import chromadb
@@ -193,14 +192,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# تفعيل وعرض اللوجو أو الاسم بشكل صحيح دون إحداث NameError
-col_logo, _ = st.columns([1, 4])
-with col_logo:
-    if os.path.exists("Kayfa_logo.png"):
-        st.image("Kayfa_logo.png", width=150)
-    else:
-        st.subheader(" 📊 Kayfa ")
-
 # ==============================================================================
 # 2. SESSION STATE INITIALIZATION
 # ==============================================================================
@@ -214,9 +205,6 @@ if "messages" not in st.session_state:
 # 3. SIDEBAR (DATA MANAGEMENT)
 # ==============================================================================
 with st.sidebar:
-    if os.path.exists("Kayfa_logo.png"):
-        st.image("Kayfa_logo.png", width=160)
-
     st.header("🕒 Chat History")
     
     # زر لبدء محادثة جديدة وتصفير الذاكرة
@@ -231,11 +219,11 @@ with st.sidebar:
     if st.session_state.messages:
         user_prompts = [msg["content"] for msg in st.session_state.messages if msg["role"] == "user"]
         for idx, saved_prompt in enumerate(user_prompts[-5:]): # عرض آخر 5 أسئلة
+            # تم إصلاح السطر هنا
             short_title = saved_prompt[:25] + "..." if len(saved_prompt) > 25 else saved_prompt
             st.caption(f"💬 {short_title}")
     else:
         st.info("No recent conversations yet.")
-
 # ==============================================================================
 # 4. CONFIGURATIONS & CONSTANTS
 # ==============================================================================
@@ -246,7 +234,7 @@ groq_model = 'llama-3.3-70b-versatile'
 path = r"my_mcp_server.py"
 path2 = r"hubspot_server.js"
 
-MD_DIR = r"text"
+MD_DIR = r"D:text"
 JSON_DIR = r"json"
 
 # ==============================================================================
@@ -260,9 +248,9 @@ def init_llama_resources():
     kb_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
     return cache_idx, kb_idx
 
-# Trigger initialization - تم تعديل الترتيب هنا لإصلاح مشكلة الـ Cache و الـ RAG
+# Trigger initialization
 try:
-    cache_index, kb_index = init_llama_resources()
+    kb_index, cache_index = init_llama_resources()
 except Exception as e:
     st.error(f"Resource Initialization Error: {e}")
     st.stop()
@@ -283,8 +271,8 @@ def update_cache(query: str, answer: str):
 
 def check_semantic_cache(query: str, threshold: float = 0.85):
     MAX_TTL = 24 * 60 * 60
+    retriever = cache_index.as_retriever(similarity_top_k=1)
     try:
-        retriever = cache_index.as_retriever(similarity_top_k=1)
         results = retriever.retrieve(query)
         if results and results[0].score >= threshold:
             node = results[0].node
@@ -524,6 +512,7 @@ st.markdown("---")
 input_col1, input_col2 = st.columns([1, 12], gap="small")
 
 with input_col1:
+    # استخدام الـ Popover لفتح نافذة رفع ملفات عائمة وأنيقة عند الضغط على الـ (+)
     with st.popover("➕", help="Upload datasets for analysis", use_container_width=True):
         uploaded_files = st.file_uploader(
             "Upload CSV datasets", 
@@ -577,18 +566,18 @@ if prompt:
                 finally:
                     await client.cleanup()
 
-            # توافقية مثالية لإدارة الـ Event loop في بيئة Streamlit التفاعلية
             try:
-                loop = asyncio.get_running_loop()
-                response = loop.run_until_complete(run_mcp_pipeline())
+                loop = asyncio.get_event_loop()
             except RuntimeError:
-                response = asyncio.run(run_mcp_pipeline())
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
 
+            response = loop.run_until_complete(run_mcp_pipeline())
             st.session_state.messages.append({"role": "assistant", "content": response})
             
     st.rerun()
 
-# إشعار حالة الملفات المرفوعة حالياً
+# إشعار سريع للمستخدم في الأسفل يوضح حالة الملفات المرفوعة حالياً إن وُجدت
 if st.session_state.uploaded_files_dict:
     loaded_names = ", ".join(st.session_state.uploaded_files_dict.keys())
     st.caption(f"📁 **Active Datasets for Analysis:** {loaded_names}")
