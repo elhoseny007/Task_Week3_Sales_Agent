@@ -8,7 +8,6 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
-import nest_asyncio
 
 # LlamaIndex Imports (بدون الـ Vector Stores)
 from llama_index.core import Settings
@@ -19,9 +18,6 @@ from llama_index.llms.groq import Groq as LlamaGroq
 from groq import Groq
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-
-# Initialize Asyncio Patch
-nest_asyncio.apply()
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -534,13 +530,17 @@ if prompt:
                 finally:
                     await client.cleanup()
 
+            # --- التعديل الآمن هنا ---
+            # لتجنب تدمير الـ Event Loop الخاص بسيرفر Streamlit/Starlette الأساسي
             try:
-                loop = asyncio.get_event_loop()
+                response = asyncio.run(run_mcp_pipeline())
             except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+                # إذا كنا بالفعل داخل Loop، نقوم بإنشاء Task فرعي معزول تماماً
+                new_loop = asyncio.new_event_loop()
+                response = new_loop.run_until_complete(run_mcp_pipeline())
+                new_loop.close()
+            # ------------------------
 
-            response = loop.run_until_complete(run_mcp_pipeline())
             st.session_state.messages.append({"role": "assistant", "content": response})
             
     st.rerun()
