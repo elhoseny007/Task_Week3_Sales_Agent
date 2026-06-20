@@ -1,7 +1,11 @@
-make_subplots
 streamlit
-plotly
-numpy 
-pandas 
-seaborn 
-matplotlib
+pandas
+chromadb
+llama-index-core
+llama-index-embeddings-huggingface
+llama-index-vector-stores-chroma
+llama-index-llms-groq
+groq
+mcp
+nest-asyncio
+python-dotenv
