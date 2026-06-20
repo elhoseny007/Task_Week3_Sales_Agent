@@ -1,27 +1,14 @@
-# Core Dependencies
-streamlit==1.40.0
-pandas==2.2.0
-python-dotenv==1.0.0
- 
-# LLM & RAG Stack
-llama-index-core==0.10.45
-llama-index-embeddings-huggingface==0.2.6
-llama-index-llms-groq==0.2.4
-llama-index-vector-stores-chroma==0.1.12
-groq==0.9.0
- 
-# ChromaDB & OpenTelemetry (FIXED VERSIONS)
-chromadb==0.4.24
-protobuf==3.20.0
-opentelemetry-api==1.21.0
-opentelemetry-sdk==1.21.0
- 
-# MCP
-mcp==0.9.0
- 
-# Async & Utilities
-nest_asyncio==1.6.0
- 
-# Additional
-aiohttp==3.9.1
-tqdm==4.66.1
+protobuf
+chromadb
+opentelemetry-api
+opentelemetry-sdk
+streamlit
+pandas
+llama-index-core
+llama-index-embeddings-huggingface
+llama-index-llms-groq
+llama-index-vector-stores-chroma
+groq
+mcp
+nest_asyncio
+python-dotenv
