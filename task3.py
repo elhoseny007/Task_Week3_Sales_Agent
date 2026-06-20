@@ -8,13 +8,13 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
-
 import nest_asyncio
 
 # LlamaIndex Imports
 from llama_index.core import VectorStoreIndex, StorageContext, Settings
 from llama_index.core.schema import TextNode, Document as LlamaDocument
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.llms.groq import Groq as LlamaGroq
 from llama_index.core.node_parser import HierarchicalNodeParser, get_leaf_nodes
 
@@ -233,7 +233,7 @@ groq_model = 'llama-3.3-70b-versatile'
 path = r"my_mcp_server.py"
 path2 = r"hubspot_server.js"
 
-MD_DIR = r"D:text"
+MD_DIR = r"text"
 JSON_DIR = r"json"
 
 # ==============================================================================
