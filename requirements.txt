@@ -7,7 +7,6 @@ pandas
 llama-index-core
 llama-index-embeddings-huggingface
 llama-index-llms-groq
-llama-index-vector-stores-chroma
 groq
 mcp
 nest_asyncio
