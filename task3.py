@@ -10,13 +10,10 @@ import pandas as pd
 import streamlit as st
 import nest_asyncio
 
-# LlamaIndex Imports
-from llama_index.core import VectorStoreIndex, StorageContext, Settings
-from llama_index.core.schema import TextNode, Document as LlamaDocument
-from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.vector_stores.chroma import ChromaVectorStore
+# LlamaIndex Imports (بدون الـ Vector Stores)
+from llama_index.core import Settings
+from llama_index.core.schema import Document as LlamaDocument
 from llama_index.llms.groq import Groq as LlamaGroq
-from llama_index.core.node_parser import HierarchicalNodeParser, get_leaf_nodes
 
 # Groq Official & MCP Imports
 from groq import Groq
@@ -206,7 +203,6 @@ if "messages" not in st.session_state:
 with st.sidebar:
     st.header("🕒 Chat History")
     
-    # زر لبدء محادثة جديدة وتصفير الذاكرة
     if st.button("➕ New Chat", use_container_width=True):
         st.session_state.messages = []
         st.session_state.uploaded_files_dict = {}
@@ -214,20 +210,18 @@ with st.sidebar:
         
     st.markdown("---")
     
-    # عرض العناوين السابقة أو ملخص بسيط للأسئلة
     if st.session_state.messages:
         user_prompts = [msg["content"] for msg in st.session_state.messages if msg["role"] == "user"]
-        for idx, saved_prompt in enumerate(user_prompts[-5:]): # عرض آخر 5 أسئلة
-            # تم إصلاح السطر هنا
+        for idx, saved_prompt in enumerate(user_prompts[-5:]):
             short_title = saved_prompt[:25] + "..." if len(saved_prompt) > 25 else saved_prompt
             st.caption(f"💬 {short_title}")
     else:
         st.info("No recent conversations yet.")
+
 # ==============================================================================
 # 4. CONFIGURATIONS & CONSTANTS
 # ==============================================================================
 Groq_api_key = os.getenv("GROQ_API_KEY", "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")
-embedding_model = 'sentence-transformers/all-MiniLM-L6-v2'
 groq_model = 'llama-3.3-70b-versatile'
 
 path = r"my_mcp_server.py"
@@ -237,54 +231,51 @@ MD_DIR = r"text"
 JSON_DIR = r"json"
 
 # ==============================================================================
-# 5. LLM RESOURCE INITIALIZATION (FIXED LOGIC & ORDER)
+# 5. LLM RESOURCE INITIALIZATION (DIRECT FILE LOADING - NO DB)
 # ==============================================================================
 @st.cache_resource
-def init_llama_resources():
+def load_knowledge_base_documents():
+    """تحميل الملفات مباشرة في الذاكرة كـ Context بدون استخدام قاعدة بيانات متجهات"""
     Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0)
-    Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
-    cache_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
-    kb_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
-    return cache_idx, kb_idx
+    all_documents = []
+    
+    # Load Markdown Files
+    if os.path.exists(MD_DIR):
+        md_files = [f for f in os.listdir(MD_DIR) if f.lower().endswith('.md')][:12]
+        for file_name in md_files:
+            file_path = os.path.join(MD_DIR, file_name)
+            with open(file_path, 'r', encoding='utf-8') as f:
+                all_documents.append(LlamaDocument(
+                    text=f.read(),
+                    metadata={"source": file_name, "type": "markdown"}
+                ))
+                
+    # Load JSON Files
+    if os.path.exists(JSON_DIR):
+        json_files = [f for f in os.listdir(JSON_DIR) if f.lower().endswith('.json')][:2]
+        for file_name in json_files:
+            file_path = os.path.join(JSON_DIR, file_name)
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = json.load(f)
+                    all_documents.append(LlamaDocument(
+                        text=json.dumps(content, ensure_ascii=False),
+                        metadata={"source": file_name, "type": "json"}
+                    ))
+            except Exception as e:
+                st.error(f"Error loading JSON {file_name}: {str(e)}")
+
+    return all_documents
 
 # Trigger initialization
 try:
-    kb_index, cache_index = init_llama_resources()
+    kb_documents = load_knowledge_base_documents()
 except Exception as e:
     st.error(f"Resource Initialization Error: {e}")
     st.stop()
 
 # ==============================================================================
-# 6. SEMANTIC CACHE ACTIONS
-# ==============================================================================
-def update_cache(query: str, answer: str):
-    node = TextNode(
-        text=query,
-        metadata={
-            'answer': str(answer),
-            'timestamp': time.time(),
-            'is_valid': True
-        }
-    )
-    cache_index.insert_nodes([node])
-
-def check_semantic_cache(query: str, threshold: float = 0.85):
-    MAX_TTL = 24 * 60 * 60
-    retriever = cache_index.as_retriever(similarity_top_k=1)
-    try:
-        results = retriever.retrieve(query)
-        if results and results[0].score >= threshold:
-            node = results[0].node
-            metadata = node.metadata
-            age = time.time() - metadata.get("timestamp", 0)
-            if metadata.get("is_valid", True) and age <= MAX_TTL:
-                return metadata["answer"], "fresh"
-    except Exception:
-        pass
-    return None, "miss"
-
-# ==============================================================================
-# 7. MCP CLIENT SUBSYSTEM
+# 6. MCP CLIENT SUBSYSTEM
 # ==============================================================================
 class MCPClient:
     def __init__(self):
@@ -338,24 +329,14 @@ class MCPClient:
         return groq_formatted_tools
 
     async def process_query(self, query: str) -> str:
-        # Step 1: Hit/Miss Check on Cache
-        cached, status = check_semantic_cache(query)
-        if cached:
-            return f"**[Cache Hit]** {cached}"
-
-        # Step 2: Fetch Context from Base Enterprise RAG Pipeline
+        # بناء الـ Context من الملفات النصية مباشرة بدلاً من الـ Retriever
         rag_context = ""
-        try:
-            kb_retriever = kb_index.as_retriever(similarity_top_k=3)
-            kb_results = kb_retriever.retrieve(query)
-            if kb_results:
-                rag_context = "Relevant Knowledge Base Context from Kayfa Catalog:\n"
-                for res in kb_results:
-                    rag_context += f"-[Source: {res.node.metadata.get('source')}]: {res.node.text}\n\n"
-        except Exception as e:
-            rag_context = f"[RAG Error fetching catalog: {e}]\n"
+        if kb_documents:
+            rag_context = "Relevant Knowledge Base Context from Kayfa Catalog:\n"
+            for doc in kb_documents:
+                rag_context += f"-[Source: {doc.metadata.get('source')}]:\n{doc.text}\n\n"
 
-        # Step 3: Inject Runtime Analytics Context from Sidebar
+        # حقن بيانات التحليل من الـ Sidebar في حال وجودها
         system_context = ""
         if st.session_state.uploaded_files_dict:
             system_context = "The user has uploaded multiple analytical datasets:\n"
@@ -387,9 +368,7 @@ class MCPClient:
                 messages=messages,
                 temperature=0.2
             )
-            actual_answer = response.choices[0].message.content
-            update_cache(query, actual_answer)
-            return actual_answer
+            return response.choices[0].message.content
 
         # Agent Tool-Calling Flow
         try:
@@ -435,7 +414,7 @@ class MCPClient:
                 )
                 final_outputs.append(final_response.choices[0].message.content)
 
-            actual_answer = "\n\n".join(final_outputs)
+            return "\n\n".join(final_outputs)
             
         except Exception:
             response = self.grok.chat.completions.create(
@@ -443,28 +422,23 @@ class MCPClient:
                 messages=messages,
                 temperature=0.2
             )
-            actual_answer = response.choices[0].message.content
-
-        update_cache(query, actual_answer)
-        return actual_answer
+            return response.choices[0].message.content
 
     async def cleanup(self):
         if self.sessions:
             await self.exit_stack.aclose()
 
 # ==============================================================================
-# 8. CHAT INTERFACE RENDER (STREAMLIT)
+# 7. CHAT INTERFACE RENDER (STREAMLIT)
 # ==============================================================================
 st.markdown("<br>", unsafe_allow_html=True)
 st.subheader("💬 Chat AI Assistant (General & Data Analysis)")
 
 def is_arabic_line(text: str) -> bool:
-    """فحص ما إذا كان السطر الحالي يحتوي على حروف عربية"""
     arabic_chars = set(chr(x) for x in range(0x0600, 0x06FF))
     return any(char in arabic_chars for char in text)
 
 def render_styled_message(role: str, content: str):
-    """تفكيك النص وعرض كل سطر بالمحاذاة والاتجاه المناسب له باللون الأبيض الصافي"""
     with st.chat_message(role):
         lines = content.split("\n")
         inside_code_block = False
@@ -502,16 +476,12 @@ def render_styled_message(role: str, content: str):
 for msg in st.session_state.messages:
     render_styled_message(msg["role"], msg["content"])
 
-# -------------------------------------------------------------
-# هيكل الإدخال المطور: دمج زر الـ (+) والملفات مع الشات
-# -------------------------------------------------------------
 st.markdown("---")
 
-# إنشاء عمودين سفليين: الأول لزر الرفع المدمج والثاني لصندوق النص
+# إدخال المطور المدمج
 input_col1, input_col2 = st.columns([1, 12], gap="small")
 
 with input_col1:
-    # استخدام الـ Popover لفتح نافذة رفع ملفات عائمة وأنيقة عند الضغط على الـ (+)
     with st.popover("➕", help="Upload datasets for analysis", use_container_width=True):
         uploaded_files = st.file_uploader(
             "Upload CSV datasets", 
@@ -535,7 +505,6 @@ with input_col1:
 with input_col2:
     prompt = st.chat_input("Ask me anything, or click the (+) button to upload datasets to analyze!")
 
-# معالجة إرسال البيانات والـ Pipeline
 if prompt:
     st.session_state.messages.append({"role": "user", "content": prompt})
     render_styled_message("user", prompt)
@@ -576,7 +545,6 @@ if prompt:
             
     st.rerun()
 
-# إشعار سريع للمستخدم في الأسفل يوضح حالة الملفات المرفوعة حالياً إن وُجدت
 if st.session_state.uploaded_files_dict:
     loaded_names = ", ".join(st.session_state.uploaded_files_dict.keys())
     st.caption(f"📁 **Active Datasets for Analysis:** {loaded_names}")
