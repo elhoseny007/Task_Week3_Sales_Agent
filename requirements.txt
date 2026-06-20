@@ -1,0 +1,7 @@
+make_subplots
+streamlit
+plotly
+numpy 
+pandas 
+seaborn 
+matplotlib
