@@ -1,5 +1,4 @@
 protobuf
-chromadb
 opentelemetry-api
 opentelemetry-sdk
 streamlit
