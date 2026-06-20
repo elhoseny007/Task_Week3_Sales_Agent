@@ -15,7 +15,6 @@ import nest_asyncio
 from llama_index.core import VectorStoreIndex, StorageContext, Settings
 from llama_index.core.schema import TextNode, Document as LlamaDocument
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
-from llama_index.vector_stores.chroma import ChromaVectorStore
 from llama_index.llms.groq import Groq as LlamaGroq
 from llama_index.core.node_parser import HierarchicalNodeParser, get_leaf_nodes
 
