@@ -42,7 +42,7 @@ st.set_page_config(
 # Custom CSS for Premium Financial Dark Theme
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght=400;500;600;700;800&display=swap');
 
 html, body, [class*="css"] {
     font-family: 'Plus Jakarta Sans', sans-serif;
@@ -235,65 +235,49 @@ with st.sidebar:
         st.info("No recent conversations yet.")
 
 # ==============================================================================
-# 4. CONFIGURATIONS & CONSTANTS (USING STREAMLIT SECRETS)
+# 4. CONFIGURATIONS & CONSTANTS
 # ==============================================================================
-# ⚠️ تحذير أمني: لا تضع API keys في الكود مباشرة!
-# بدلاً من ذلك، استخدم Streamlit Secrets على Cloud
-try:
-    Groq_api_key = st.secrets.get("GROQ_API_KEY", os.getenv("GROQ_API_KEY"))
-    if not Groq_api_key:
-        st.error("❌ GROQ_API_KEY not found. Please add it to your .env file or Streamlit secrets.")
-        st.stop()
-except:
-    Groq_api_key = os.getenv("GROQ_API_KEY")
-    if not Groq_api_key:
-        st.error("❌ GROQ_API_KEY not found. Please add it to your .env file or Streamlit secrets.")
-        st.stop()
-
+Groq_api_key = os.getenv("GROQ_API_KEY", "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")
 embedding_model = 'sentence-transformers/all-MiniLM-L6-v2'
 groq_model = 'llama-3.3-70b-versatile'
 
-# استخدام مسارات نسبية وآمنة
-path = "my_mcp_server.py"
-path2 = "hubspot_server.js"
+path = r"my_mcp_server.py"
+path2 = r"hubspot_server.js"
 
-MD_DIR = "text"
-JSON_DIR = "json"
+MD_DIR = r"text"
+JSON_DIR = r"json"
 
 # ==============================================================================
-# 5. LLM RESOURCE INITIALIZATION
+# 5. LLM RESOURCE INITIALIZATION (FIXED LOGIC & ORDER)
 # ==============================================================================
 @st.cache_resource
 def init_llama_resources():
-    try:
-        Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0)
-        Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
-        cache_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
-        kb_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
-        return cache_idx, kb_idx
-    except Exception as e:
-        st.error(f"Resource Initialization Error: {e}")
-        st.stop()
+    Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0)
+    Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
+    cache_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
+    kb_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
+    return cache_idx, kb_idx
 
-# Trigger initialization
-cache_index, kb_index = init_llama_resources()
+# Trigger initialization - تم تعديل الترتيب هنا لإصلاح مشكلة الـ Cache و الـ RAG
+try:
+    cache_index, kb_index = init_llama_resources()
+except Exception as e:
+    st.error(f"Resource Initialization Error: {e}")
+    st.stop()
 
 # ==============================================================================
 # 6. SEMANTIC CACHE ACTIONS
 # ==============================================================================
 def update_cache(query: str, answer: str):
-    try:
-        node = TextNode(
-            text=query,
-            metadata={
-                'answer': str(answer),
-                'timestamp': time.time(),
-                'is_valid': True
-            }
-        )
-        cache_index.insert_nodes([node])
-    except Exception as e:
-        pass  # Cache update failed, but don't stop execution
+    node = TextNode(
+        text=query,
+        metadata={
+            'answer': str(answer),
+            'timestamp': time.time(),
+            'is_valid': True
+        }
+    )
+    cache_index.insert_nodes([node])
 
 def check_semantic_cache(query: str, threshold: float = 0.85):
     MAX_TTL = 24 * 60 * 60
@@ -322,29 +306,25 @@ class MCPClient:
 
     async def connect_to_server(self, server_script_path: str):
         if not os.path.exists(server_script_path):
-            st.warning(f"⚠️ Server script not found: {server_script_path}")
-            return
+            raise FileNotFoundError(f"Server script not found: {server_script_path}")
 
         is_python = server_script_path.endswith('.py')
         is_js = server_script_path.endswith('.js')
         if not (is_python or is_js):
             raise ValueError("Server script must be a .py or .js file")
 
-        try:
-            command = sys.executable if is_python else "node"
-            server_params = StdioServerParameters(
-                command=command,
-                args=[server_script_path],
-                env=os.environ.copy()
-            )
+        command = sys.executable if is_python else "node"
+        server_params = StdioServerParameters(
+            command=command,
+            args=[server_script_path],
+            env=os.environ.copy()
+        )
 
-            stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
-            stdio, write = stdio_transport
-            session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
-            await session.initialize()
-            self.sessions.append(session)
-        except Exception as e:
-            st.warning(f"⚠️ Could not connect to {server_script_path}: {str(e)}")
+        stdio_transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
+        stdio, write = stdio_transport
+        session = await self.exit_stack.enter_async_context(ClientSession(stdio, write))
+        await session.initialize()
+        self.sessions.append(session)
 
     async def _get_all_tools(self):
         groq_formatted_tools = []
@@ -382,7 +362,7 @@ class MCPClient:
             if kb_results:
                 rag_context = "Relevant Knowledge Base Context from Kayfa Catalog:\n"
                 for res in kb_results:
-                    rag_context += f"-[Source: {res.node.metadata.get('source', 'Unknown')}]: {res.node.text}\n\n"
+                    rag_context += f"-[Source: {res.node.metadata.get('source')}]: {res.node.text}\n\n"
         except Exception as e:
             rag_context = f"[RAG Error fetching catalog: {e}]\n"
 
@@ -468,7 +448,7 @@ class MCPClient:
 
             actual_answer = "\n\n".join(final_outputs)
             
-        except Exception as e:
+        except Exception:
             response = self.grok.chat.completions.create(
                 model=groq_model,
                 messages=messages,
@@ -576,17 +556,22 @@ if prompt:
             async def run_mcp_pipeline():
                 client = MCPClient()
                 try:
-                    # Try to connect to MCP servers if they exist
                     if os.path.exists(path):
-                        await client.connect_to_server(path)
+                        try:
+                            await client.connect_to_server(path)
+                        except Exception as e:
+                            st.error(f"Error connecting to Python server: {e}")
 
                     if os.path.exists(path2):
-                        await client.connect_to_server(path2)
+                        try:
+                            await client.connect_to_server(path2)
+                        except Exception as e:
+                            st.error(f"Error connecting to HubSpot JS server: {e}")
                     
                     res = await client.process_query(prompt)
                     return res
                 except Exception as e:
-                    return f"Error during execution: {str(e)}"
+                    return f"Error during execution: {e}"
                 finally:
                     await client.cleanup()
 
