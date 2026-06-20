@@ -5,7 +5,7 @@ import asyncio
 import sys
 from contextlib import AsyncExitStack
 from typing import Optional
-
+os.environ["PROTOCOL_BUFFERS_PYTHON_IMPLEMENTATION"] = "python"
 import pandas as pd
 import streamlit as st
 import chromadb
