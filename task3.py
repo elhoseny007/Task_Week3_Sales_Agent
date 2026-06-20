@@ -192,6 +192,11 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+with col_logo:
+    if os.path.exists("Kayfa_logo.png"):
+        st.image("Kayfa_logo.png", width=150)
+    else:
+        st.subheader(" 📊 Kayfa ")
 # ==============================================================================
 # 2. SESSION STATE INITIALIZATION
 # ==============================================================================
@@ -205,8 +210,9 @@ if "messages" not in st.session_state:
 # 3. SIDEBAR (DATA MANAGEMENT)
 # ==============================================================================
 with st.sidebar:
+    st.image(r"Kayfa_logo.png", width=160)
+
     st.header("🕒 Chat History")
-    
     # زر لبدء محادثة جديدة وتصفير الذاكرة
     if st.button("➕ New Chat", use_container_width=True):
         st.session_state.messages = []
@@ -231,87 +237,22 @@ Groq_api_key = os.getenv("GROQ_API_KEY", "gsk_kdCgKtBaXejDEjv7QO0bWGdyb3FYVViwqR
 embedding_model = 'sentence-transformers/all-MiniLM-L6-v2'
 groq_model = 'llama-3.3-70b-versatile'
 
-path = r"C:\Users\ELZAHBIA\Vs_code\my_mcp_server.py"
-path2 = r"C:\Users\ELZAHBIA\Vs_code\hubspot_server.js"
+path = r"my_mcp_server.py"
+path2 = r"hubspot_server.js"
 
-MD_DIR = r"D:\Desktop\Data Analysis\Internship\AI_Agent_intern\text"
-JSON_DIR = r"D:\Desktop\Data Analysis\Internship\AI_Agent_intern\json"
+MD_DIR = r"text"
+JSON_DIR = r"json"
 
 # ==============================================================================
 # 5. LLM RESOURCE INITIALIZATION (FIXED LOGIC & ORDER)
 # ==============================================================================
 @st.cache_resource
 def init_llama_resources():
-    # A. Global Configs
     Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0)
     Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
-
-    # B. DB Storage Context Setup
-    cache_path = os.path.join(os.getcwd(), "cache_db_analyst")
-    os.makedirs(cache_path, exist_ok=True)
-    chroma_client = chromadb.PersistentClient(path=cache_path)
-    
-    # C. Initialize Semantic Cache Index
-    cache_collection = chroma_client.get_or_create_collection("semantic_cache")
-    cache_store = ChromaVectorStore(chroma_collection=cache_collection)
-    cache_storage_context = StorageContext.from_defaults(vector_store=cache_store)
-    cache_idx = VectorStoreIndex(nodes=[], storage_context=cache_storage_context, embed_model=Settings.embed_model)
-    
-    # D. Initialize Knowledge Base Storage
-    kb_collection = chroma_client.get_or_create_collection("kayfa_knowledge_base")
-    kb_store = ChromaVectorStore(chroma_collection=kb_collection)
-    kb_storage_context = StorageContext.from_defaults(vector_store=kb_store)
-    
-    # E. Load Documents if collection is empty
-    all_documents = []
-    if kb_collection.count() == 0:
-        # Load Markdown Files
-        if os.path.exists(MD_DIR):
-            md_files = [f for f in os.listdir(MD_DIR) if f.lower().endswith('.md')][:12]
-            for file_name in md_files:
-                file_path = os.path.join(MD_DIR, file_name)
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    all_documents.append(LlamaDocument(
-                        text=f.read(),
-                        metadata={"source": file_name, "type": "markdown"}
-                    ))
-                    
-        # Load JSON Files
-        if os.path.exists(JSON_DIR):
-            json_files = [f for f in os.listdir(JSON_DIR) if f.lower().endswith('.json')][:2]
-            for file_name in json_files:
-                file_path = os.path.join(JSON_DIR, file_name)
-                try:
-                    with open(file_path, 'r', encoding='utf-8') as f:
-                        content = json.load(f)
-                        all_documents.append(LlamaDocument(
-                            text=json.dumps(content, ensure_ascii=False),
-                            metadata={"source": file_name, "type": "json"}
-                        ))
-                except Exception as e:
-                    st.error(f"Error loading JSON {file_name}: {str(e)}")
-
-    # F. Build or Load Index with Child-Parent Splitting
-    if kb_collection.count() == 0 and all_documents:
-        node_parser = HierarchicalNodeParser.from_defaults(
-            chunk_sizes=[512, 128],
-            chunk_overlap=20
-        )
-        all_nodes = node_parser.get_nodes_from_documents(all_documents)
-        leaf_nodes = get_leaf_nodes(all_nodes)
-        
-        kb_idx = VectorStoreIndex(
-            leaf_nodes,
-            storage_context=kb_storage_context,
-            embed_model=Settings.embed_model
-        )
-    else:
-        kb_idx = VectorStoreIndex.from_vector_store(
-            vector_store=kb_store, 
-            embed_model=Settings.embed_model
-        )
-
-    return kb_idx, cache_idx
+    cache_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
+    kb_idx = VectorStoreIndex(nodes=[], embed_model=Settings.embed_model)
+    return cache_idx, kb_idx
 
 # Trigger initialization
 try:
