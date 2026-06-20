@@ -8,7 +8,7 @@ from typing import Optional
 
 import pandas as pd
 import streamlit as st
-import chromadb
+
 import nest_asyncio
 
 # LlamaIndex Imports
