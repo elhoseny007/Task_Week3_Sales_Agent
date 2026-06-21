@@ -352,11 +352,16 @@ class MCPClient:
     async def process_query(self, query: str) -> str:
         # بناء الـ Context من الملفات النصية مباشرة بدلاً من الـ Retriever
         rag_context = ""
-        if kb_documents:
-            rag_context = "Relevant Knowledge Base Context from Kayfa Catalog:\n"
-            for doc in kb_documents:
-                rag_context += f"-[Source: {doc.metadata.get('source')}]:\n{doc.text}\n\n"
-
+        try:
+            # هنا بنخلي الـ Index يبحث عن أفضل 3 فقرات متوافقة مع سؤال المستخدم بالـ Embeddings
+            kb_retriever = kb_index.as_retriever(similarity_top_k=3)
+            kb_results = kb_retriever.retrieve(query)
+            if kb_results:
+                rag_context = "Relevant Knowledge Base Context from Kayfa Catalog:\n"
+                for res in kb_results:
+                    rag_context += f"-[Source: {res.node.metadata.get('source')}]: {res.node.text}\n\n"
+        except Exception as e:
+            rag_context = f"[RAG Error fetching catalog: {e}]\n"
         # حقن بيانات التحليل من الـ Sidebar في حال وجودها
         system_context = ""
         if st.session_state.uploaded_files_dict:
