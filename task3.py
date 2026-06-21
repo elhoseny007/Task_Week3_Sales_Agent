@@ -225,7 +225,7 @@ with st.sidebar:
 # 4. CONFIGURATIONS & CONSTANTS
 # ==============================================================================
 Groq_api_key = os.getenv("GROQ_API_KEY", "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")
-groq_model = 'qwen-qwq-32b'
+groq_model = 'qwen/qwen3.6-27b'
 embedding_model = 'sentence-transformers/all-MiniLM-L6-v2'
 path = r"my_mcp_server.py"
 path2 = r"hubspot_server.js"
