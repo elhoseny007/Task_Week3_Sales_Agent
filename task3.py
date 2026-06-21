@@ -13,7 +13,9 @@ import streamlit as st
 from llama_index.core import Settings
 from llama_index.core.schema import Document as LlamaDocument
 from llama_index.llms.groq import Groq as LlamaGroq
-
+from llama_index.embeddings.huggingface import HuggingFaceEmbedding
+from llama_index.core import VectorStoreIndex, StorageContext
+from llama_index.core.vector_stores import SimpleVectorStore
 # Groq Official & MCP Imports
 from groq import Groq
 from mcp import ClientSession, StdioServerParameters
@@ -228,9 +230,7 @@ JSON_DIR = r"json"
 
 # ==============================================================================
 # 5. LLM RESOURCE INITIALIZATION (DIRECT FILE LOADING - NO DB)
-# ==============================================================================
-from llama_index.core import VectorStoreIndex, StorageContext
-from llama_index.core.vector_stores import SimpleVectorStore
+# =============================================================================
 
 @st.cache_resource
 def init_llama_resources():
