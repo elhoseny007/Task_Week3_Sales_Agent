@@ -221,7 +221,7 @@ with st.sidebar:
 # ==============================================================================
 Groq_api_key = os.getenv("GROQ_API_KEY", "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")
 groq_model = 'llama-3.3-70b-versatile'
-
+embedding_model = 'sentence-transformers/all-MiniLM-L6-v2'
 path = r"my_mcp_server.py"
 path2 = r"hubspot_server.js"
 
