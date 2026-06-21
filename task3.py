@@ -164,10 +164,11 @@ html, body, [class*="css"] {
 """, unsafe_allow_html=True)
 
 # Render Navbar & Hero
+col_logo, col_title = st.columns([1, 4])
 with col_logo:
     st.image(r"Kayfa_logo.png", width=180)
-    
-st.markdown("""
+with col_title:
+    st.markdown("""
 <div class="navbar">
     <div class="logo">Kayfa <span>Sales AI</span></div>
     <div class="menu">🧠</div>
