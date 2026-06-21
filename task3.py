@@ -229,13 +229,23 @@ JSON_DIR = r"json"
 # ==============================================================================
 # 5. LLM RESOURCE INITIALIZATION (DIRECT FILE LOADING - NO DB)
 # ==============================================================================
+from llama_index.core import VectorStoreIndex, StorageContext
+from llama_index.core.vector_stores import SimpleVectorStore
+
 @st.cache_resource
-def load_knowledge_base_documents():
-    """تحميل الملفات مباشرة في الذاكرة كـ Context بدون استخدام قاعدة بيانات متجهات"""
+def init_llama_resources():
+    """بناء مخزن متجهات مدمج في الذاكرة سريع وآمن تماماً مع Streamlit Cloud"""
+    # أ. الإعدادات العامة للموديل والـ Embeddings
     Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0)
+    Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
+
+    # ب. إنشاء الـ Vector Store المعزول في الذاكرة (Pure Python)
+    vector_store = SimpleVectorStore()
+    storage_context = StorageContext.from_defaults(vector_store=vector_store)
+    
     all_documents = []
     
-    # Load Markdown Files
+    # ج. تحميل ملفات الـ Markdown
     if os.path.exists(MD_DIR):
         md_files = [f for f in os.listdir(MD_DIR) if f.lower().endswith('.md')][:12]
         for file_name in md_files:
@@ -246,7 +256,7 @@ def load_knowledge_base_documents():
                     metadata={"source": file_name, "type": "markdown"}
                 ))
                 
-    # Load JSON Files
+    # د. تحميل ملفات الـ JSON
     if os.path.exists(JSON_DIR):
         json_files = [f for f in os.listdir(JSON_DIR) if f.lower().endswith('.json')][:2]
         for file_name in json_files:
@@ -261,11 +271,21 @@ def load_knowledge_base_documents():
             except Exception as e:
                 st.error(f"Error loading JSON {file_name}: {str(e)}")
 
-    return all_documents
+    # هـ. بناء الـ Index وعمل الـ Embeddings في الذاكرة
+    if all_documents:
+        kb_idx = VectorStoreIndex.from_documents(
+            all_documents,
+            storage_context=storage_context,
+            embed_model=Settings.embed_model
+        )
+    else:
+        kb_idx = VectorStoreIndex([], embed_model=Settings.embed_model)
 
-# Trigger initialization
+    return kb_idx
+
+# تشغيل الدالة وبناء الـ Index
 try:
-    kb_documents = load_knowledge_base_documents()
+    kb_index = init_llama_resources()
 except Exception as e:
     st.error(f"Resource Initialization Error: {e}")
     st.stop()
