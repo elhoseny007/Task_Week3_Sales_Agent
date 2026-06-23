@@ -40,7 +40,6 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 from langfuse import Langfuse
-import os
 
 lf = Langfuse(
     public_key=os.getenv("LANGFUSE_PUBLIC_KEY", "pk-lf-d5ec3773-fab8-4872-8bbb-219dbffe63b3"),
