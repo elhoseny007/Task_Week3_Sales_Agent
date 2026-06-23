@@ -1,12 +1,21 @@
-protobuf
-opentelemetry-api
-opentelemetry-sdk
+# Streamlit & Data
 streamlit
 pandas
+
+# LlamaIndex Core & Extensions
 llama-index-core
-llama-index-embeddings-huggingface
 llama-index-llms-groq
+llama-index-embeddings-huggingface
+
+# Langfuse Integration
+langfuse
+
+# Groq Official SDK
 groq
+
+# Model Context Protocol (MCP) Client
 mcp
-nest_asyncio
+
+# Environment Variables & Async Utilities
 python-dotenv
+asyncio
