@@ -232,7 +232,7 @@ html, body, [class*="css"] {
 col_logo, col_title = st.columns([1, 4])
 with col_logo:
     try:
-        st.image(r"c:\Users\ELZAHBIA\Downloads\mortarboard.png", width=180)
+        st.image(r"mortarboard.png", width=180)
     except:
         pass
 with col_title:
@@ -604,7 +604,7 @@ def is_arabic_line(text: str) -> bool:
     return any(char in arabic_chars for char in text)
 
 def render_styled_message(role: str, content: str):
-    avatar_to_show = r"c:\Users\ELZAHBIA\Downloads\mortarboard.png" if role == "assistant" else None
+    avatar_to_show = r"mortarboard.png" if role == "assistant" else None
     with st.chat_message(role, avatar=avatar_to_show):
         lines = content.split("\n")
         inside_code_block = False
@@ -675,7 +675,7 @@ if st.session_state.current_view == "chat":
         render_styled_message("user", prompt)
 
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        with st.chat_message("assistant", avatar=r"c:\Users\ELZAHBIA\Downloads\mortarboard.png"):
+        with st.chat_message("assistant", avatar=r"mortarboard.png"):
             with st.spinner("Thinking..."):
                 async def run_mcp_pipeline():
                     client = MCPClient()
