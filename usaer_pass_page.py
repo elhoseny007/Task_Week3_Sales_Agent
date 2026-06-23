@@ -1,8 +1,3 @@
-"""
-🔑 Kayfa Authentic Dashboard - نسخة محسّنة وكاملة
-مع إصلاح شامل لمشاكل التحديث والـ Cache
-"""
-
 import os
 import time
 import streamlit as st
