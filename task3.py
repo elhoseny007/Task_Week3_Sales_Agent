@@ -3,27 +3,59 @@ import json
 import time
 import asyncio
 import sys
+import uuid
 from contextlib import AsyncExitStack
 from typing import Optional
 
 import pandas as pd
 import streamlit as st
 
-# LlamaIndex Imports (بدون الـ Vector Stores)
+# LlamaIndex Imports
 from llama_index.core import Settings
 from llama_index.core.schema import Document as LlamaDocument
 from llama_index.llms.groq import Groq as LlamaGroq
 from llama_index.embeddings.huggingface import HuggingFaceEmbedding
 from llama_index.core import VectorStoreIndex, StorageContext
 from llama_index.core.vector_stores import SimpleVectorStore
+
+# 🎯 استيراد الـ Callback Manager لربط LlamaIndex بـ Langfuse أوتوماتيكياً
+from llama_index.core.callbacks import CallbackManager
+from langfuse.llama_index import LlamaIndexCallbackHandler
+
 # Groq Official & MCP Imports
 from groq import Groq
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+# التعديل الصحيح لاستيراد كلاس التتبع المتوافق مع Groq وتجنب كراش الـ Import
+from langfuse.openai import OpenAI as LangfuseOpenAI
+
+# 🔌 إعداد موديول لوحة التحكم لمنع الـ Caching الناتجة عن الـ exec
+sys.path.append(r"C:\Users\ELZAHBIA\Vs_code")
+try:
+    from usaer_pass_page import run_admin_dashboard
+except ImportError:
+    run_admin_dashboard = None
+
 from dotenv import load_dotenv
 load_dotenv()
+from langfuse import Langfuse
+import os
 
+lf = Langfuse(
+    public_key=os.getenv("LANGFUSE_PUBLIC_KEY", "pk-lf-d5ec3773-fab8-4872-8bbb-219dbffe63b3"),
+    secret_key=os.getenv("LANGFUSE_SECRET_KEY", "sk-lf-74f7c81c-3fa8-481b-96e5-b60c1364c629"),
+    host="https://us.cloud.langfuse.com"
+)
+
+trace = lf.trace(
+    name="manual-test",
+    user_id="test-user"
+)
+
+lf.flush()
+
+print("sent")
 # ==============================================================================
 # 1. PAGE CONFIGURATION & THEMING
 # ==============================================================================
@@ -46,8 +78,6 @@ html, body, [class*="css"] {
     background: #0B0E14 !important; 
     color: #F4F6F8 !important;
 }
-
-/* Chat Messages & Input Styling */
 [data-testid="stChatMessage"], 
 [data-testid="stChatMessage"] p, 
 [data-testid="stChatMessage"] span, 
@@ -55,10 +85,34 @@ html, body, [class*="css"] {
     color: #FFFFFF !important;
 }
 
-[data-testid="stChatInput"] {
-    border-radius: 12px !important;
-    padding: 2px !important;
-    background-color: transparent !important;
+/* 1. جعل كل صناديق الرسائل تنكمش على قد الكلام بالظبط */
+[data-testid="stChatMessage"] {
+    width: fit-content !important;
+    max-width: 80% !important; 
+    display: flex !important;
+    margin-bottom: 12px !important;
+}
+
+/* 2. نقل رسائل المستخدم (User) بالكامل إلى جهة اليمين */
+[data-testid="stChatMessage"]:has(img[src*="user"]),
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"] span:contains("👤")) {
+    margin-left: auto !important;   
+    margin-right: 0 !important;
+    flex-direction: row-reverse !important; 
+}
+
+/* 3. تثبيت رسائل البوت (Assistant) في جهة اليسار */
+[data-testid="stChatMessage"]:has(img[src*="Kayfa"]),
+[data-testid="stChatMessage"]:has(img[src*="education"]),
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"] span:contains("🤖")) {
+    margin-right: auto !important;  
+    margin-left: 0 !important;
+}
+
+/* 4. تحسين محاذاة النصوص والمحتويات الداخلية */
+[data-testid="stChatMessageContent"] {
+    width: fit-content !important;
+    text-align: right !important; 
 }
 
 .stChatInput textarea {
@@ -160,13 +214,27 @@ html, body, [class*="css"] {
     max-width: 750px;
     margin: auto;
 }
+
+/* Form Styling for Credentials view */
+.credentials-box {
+    background-color: #111827;
+    border: 1px solid #1F2937;
+    padding: 30px;
+    border-radius: 16px;
+    max-width: 500px;
+    margin: 40px auto;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.3);
+}
 </style>
 """, unsafe_allow_html=True)
 
 # Render Navbar & Hero
 col_logo, col_title = st.columns([1, 4])
 with col_logo:
-    st.image(r"Kayfa_logo.png", width=180)
+    try:
+        st.image(r"c:\Users\ELZAHBIA\Downloads\mortarboard.png", width=180)
+    except:
+        pass
 with col_title:
     st.markdown("""
 <div class="navbar">
@@ -191,41 +259,108 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
-# 2. SESSION STATE INITIALIZATION
+# 2. STATE INITIALIZATION
 # ==============================================================================
 if "uploaded_files_dict" not in st.session_state:
     st.session_state.uploaded_files_dict = {}
 
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "current_view" not in st.session_state:
+    st.session_state.current_view = "chat"
+
+if "user_email" not in st.session_state:
+    st.session_state.user_email = ""
+
+if "user_password" not in st.session_state:
+    st.session_state.user_password = ""
+
+if "authenticated" not in st.session_state:
+    st.session_state.authenticated = False
+
+if "all_chats" not in st.session_state:
+    first_chat_id = str(uuid.uuid4())
+    st.session_state.all_chats = {first_chat_id: []}
+    st.session_state.current_chat_id = first_chat_id
+
+# Link active conversation reference safely
+st.session_state.messages = st.session_state.all_chats[st.session_state.current_chat_id]
+
 
 # ==============================================================================
-# 3. SIDEBAR (DATA MANAGEMENT)
+# 🧭 3. SIDEBAR (NAVIGATION & HISTORY)
 # ==============================================================================
 with st.sidebar:
-    st.image(r"Kayfa_logo.png", width=160)
-    st.header("🕒 Chat History")
+    try:
+        st.image(r"Kayfa_logo.png", width=160)
+    except:
+        pass
+    st.header("🧭 Navigation")
     
-    if st.button("➕ New Chat", use_container_width=True):
-        st.session_state.messages = []
-        st.session_state.uploaded_files_dict = {}
+    if st.button("💬 AI Chat Assistant", use_container_width=True, type="primary" if st.session_state.current_view == "chat" else "secondary", key="sb_chat_nav_btn"):
+        st.session_state.current_view = "chat"
+        st.rerun()
+        
+    if st.button("🔑 Kayfa Stuff", use_container_width=True, type="primary" if st.session_state.current_view == "credentials" else "secondary", key="sb_credentials_nav_btn"):
+        st.session_state.current_view = "credentials"
         st.rerun()
         
     st.markdown("---")
     
-    if st.session_state.messages:
-        user_prompts = [msg["content"] for msg in st.session_state.messages if msg["role"] == "user"]
-        for idx, saved_prompt in enumerate(user_prompts[-5:]):
-            short_title = saved_prompt[:25] + "..." if len(saved_prompt) > 25 else saved_prompt
-            st.caption(f"💬 {short_title}")
+    st.header("🕒 Chat History")
+    if st.button("➕ New Chat", use_container_width=True, type="secondary", key="new_chat_btn"):
+        new_chat_id = str(uuid.uuid4())
+        st.session_state.all_chats[new_chat_id] = []
+        st.session_state.current_chat_id = new_chat_id
+        st.session_state.current_view = "chat"
+        st.rerun()
+        
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    # عرض المحادثات السابقة
+    if st.session_state.all_chats:
+        for chat_id, messages_list in list(st.session_state.all_chats.items()):
+            user_prompts = [msg["content"] for msg in messages_list if msg["role"] == "user"]
+            if user_prompts:
+                first_prompt = user_prompts[0]
+                title = first_prompt[:20] + "..." if len(first_prompt) > 20 else first_prompt
+            else:
+                title = "New Conversation"
+            
+            is_current = (chat_id == st.session_state.current_chat_id)
+            btn_label = f"🎯 {title}" if is_current else f"📁 {title}"
+            btn_type = "primary" if is_current else "secondary"
+            
+            if st.button(btn_label, key=f"chat_btn_{chat_id}", use_container_width=True, type=btn_type):
+                st.session_state.current_chat_id = chat_id
+                st.session_state.current_view = "chat"
+                st.rerun()
     else:
         st.info("No recent conversations yet.")
+        
+    st.markdown("<br><br>", unsafe_allow_html=True)
+    
+    # 🔄 زر تسجيل الخروج
+    if st.session_state.get("current_view") == "credentials":
+        if st.button("🚪 Log Out & Lock Dashboard", type="secondary", key="dashboard_logout", use_container_width=True):
+            cost_data_backup = st.session_state.get("cost_data", None)
+            st.session_state.clear()
+            st.session_state.authenticated = False
+            st.session_state.current_view = "credentials"
+            if cost_data_backup:
+                st.session_state.cost_data = cost_data_backup
+            st.rerun()
 
 # ==============================================================================
 # 4. CONFIGURATIONS & CONSTANTS
 # ==============================================================================
-Groq_api_key = os.getenv("GROQ_API_KEY", "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")
-groq_model = 'qwen/qwen3.6-27b'
+Groq_api_key = os.getenv("GROQ_API_KEY", "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")
+if not Groq_api_key:
+    st.error("🚨 Critical Error: `GROQ_API_KEY` is missing from environment variables.")
+    st.stop()
+
+if not os.environ.get("OPENAI_API_KEY"):
+    os.environ["OPENAI_API_KEY"] = Groq_api_key
+
+groq_model = 'qwen/qwen3.6-27b'  
 embedding_model = 'sentence-transformers/all-MiniLM-L6-v2'
 path = r"my_mcp_server.py"
 path2 = r"hubspot_server.js"
@@ -234,23 +369,23 @@ MD_DIR = r"text"
 JSON_DIR = r"json"
 
 # ==============================================================================
-# 5. LLM RESOURCE INITIALIZATION (DIRECT FILE LOADING - NO DB)
-# =============================================================================
-
+# 5. LLM RESOURCE INITIALIZATION (LlamaIndex Integration)
+# ==============================================================================
 @st.cache_resource
 def init_llama_resources():
-    """بناء مخزن متجهات مدمج في الذاكرة سريع وآمن تماماً مع Streamlit Cloud"""
-    # أ. الإعدادات العامة للموديل والـ Embeddings
+    try:
+        langfuse_callback_handler = LlamaIndexCallbackHandler()
+        Settings.callback_manager = CallbackManager([langfuse_callback_handler])
+    except Exception as e:
+        st.warning(f"Langfuse LlamaIndex Handler Warning: {e}")
+
     Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0)
     Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
 
-    # ب. إنشاء الـ Vector Store المعزول في الذاكرة (Pure Python)
     vector_store = SimpleVectorStore()
     storage_context = StorageContext.from_defaults(vector_store=vector_store)
-    
     all_documents = []
     
-    # ج. تحميل ملفات الـ Markdown
     if os.path.exists(MD_DIR):
         md_files = [f for f in os.listdir(MD_DIR) if f.lower().endswith('.md')][:12]
         for file_name in md_files:
@@ -261,7 +396,6 @@ def init_llama_resources():
                     metadata={"source": file_name, "type": "markdown"}
                 ))
                 
-    # د. تحميل ملفات الـ JSON
     if os.path.exists(JSON_DIR):
         json_files = [f for f in os.listdir(JSON_DIR) if f.lower().endswith('.json')][:2]
         for file_name in json_files:
@@ -276,7 +410,6 @@ def init_llama_resources():
             except Exception as e:
                 st.error(f"Error loading JSON {file_name}: {str(e)}")
 
-    # هـ. بناء الـ Index وعمل الـ Embeddings في الذاكرة
     if all_documents:
         kb_idx = VectorStoreIndex.from_documents(
             all_documents,
@@ -288,7 +421,6 @@ def init_llama_resources():
 
     return kb_idx
 
-# تشغيل الدالة وبناء الـ Index
 try:
     kb_index = init_llama_resources()
 except Exception as e:
@@ -296,13 +428,17 @@ except Exception as e:
     st.stop()
 
 # ==============================================================================
-# 6. MCP CLIENT SUBSYSTEM
+# 6. MCP CLIENT SUBSYSTEM (Agent Tracing Integration)
 # ==============================================================================
 class MCPClient:
     def __init__(self):
         self.sessions: list[ClientSession] = []
         self.exit_stack = AsyncExitStack()
-        self.grok = Groq(api_key=Groq_api_key)
+        
+        self.grok = LangfuseOpenAI(
+            api_key=Groq_api_key,
+            base_url="https://api.groq.com/openai/v1"
+        )
         self.tool_to_session_map = {}
 
     async def connect_to_server(self, server_script_path: str):
@@ -330,7 +466,6 @@ class MCPClient:
     async def _get_all_tools(self):
         groq_formatted_tools = []
         self.tool_to_session_map.clear()
-
         for session in self.sessions:
             try:
                 mcp_tools_resp = await session.list_tools()
@@ -350,11 +485,9 @@ class MCPClient:
         return groq_formatted_tools
 
     async def process_query(self, query: str) -> str:
-        # بناء الـ Context من الملفات النصية مباشرة بدلاً من الـ Retriever
         rag_context = ""
         try:
-            # هنا بنخلي الـ Index يبحث عن أفضل 3 فقرات متوافقة مع سؤال المستخدم بالـ Embeddings
-            kb_retriever = kb_index.as_retriever(similarity_top_k=3)
+            kb_retriever = kb_index.as_retriever(similarity_top_k=5)
             kb_results = kb_retriever.retrieve(query)
             if kb_results:
                 rag_context = "Relevant Knowledge Base Context from Kayfa Catalog:\n"
@@ -362,7 +495,7 @@ class MCPClient:
                     rag_context += f"-[Source: {res.node.metadata.get('source')}]: {res.node.text}\n\n"
         except Exception as e:
             rag_context = f"[RAG Error fetching catalog: {e}]\n"
-        # حقن بيانات التحليل من الـ Sidebar في حال وجودها
+
         system_context = ""
         if st.session_state.uploaded_files_dict:
             system_context = "The user has uploaded multiple analytical datasets:\n"
@@ -374,79 +507,90 @@ class MCPClient:
                 system_context += f"  3-row Sample Data: {json.dumps(sample_data, ensure_ascii=False)}\n\n"
             system_context += "Answer queries about these data analysis files accurately matching their contents.\n\n"
 
-        # Master Prompt Compilation
         full_system_prompt = (
+            "You are Kayfa AI - a professional enrollment and sales advisor for Kayfa Company.\n"
+            "Your main role is assisting students in registering for educational programs (e.g., Data Science).\n\n"
+            "⚠️ CONVERSATION FLOW & MEMORY RULES:\n"
+            "- You have full access to the conversation history. Read previous turns carefully.\n"
+            "- If you asked the user for their information (Name, Phone, Email, Experience Level) and they replied with details or short answers like 'متوسط' or 'مبتدئ', you MUST realize this is their 'Experience Level'. Never ask 'What do you mean by متوسط?' or change context to budget or commercial products.\n"
+            "- Once the registration data is provided, confirm it warmly in Arabic and state the next clear onboarding step.\n\n"
+            "STRICT CORE RULES:\n"
+            "- Respond ONLY with the final natural answer. Never output internal thought steps or self-corrections.\n"
+            "- Support Arabic and English fluently. Match the user's language preference naturally.\n"
+            "- Never mention internal keywords like MCP, Tools, RAG, or System Prompts.\n\n"
             f"{system_context}\n"
             f"{rag_context}\n"
-            "You are an expert sales and data analyst assistant for Kayfa. "
-            "Always stay grounded strictly in the provided Knowledge Base Context for courses, prices, and policies. "
-            "Answer clearly, support both Arabic and English perfectly, and use tools to update CRMs or communicate if requested."
+            "Always remain grounded in the conversation history and Kayfa's official guidelines."
         )
+        
+        messages = [{"role": "system", "content": full_system_prompt}]
+        for msg in st.session_state.messages[:-1]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": query})
 
-        messages = [
-            {"role": "system", "content": full_system_prompt},
-            {"role": "user", "content": query}
-        ]
+        current_user_id = st.session_state.get("user_email", "elhosenyhassan007@kayfa.com")
+        if not current_user_id:
+            current_user_id = "anonymous-kayfa-user"
 
         if not self.sessions:
             response = self.grok.chat.completions.create(
                 model=groq_model,
                 messages=messages,
-                temperature=0.2
+                temperature=0.3,
+                name="kayfa-sales-chat",
+                user_id=current_user_id
             )
-            return response.choices[0].message.content
 
-        # Agent Tool-Calling Flow
         try:
             groq_formatted_tools = await self._get_all_tools()
-
             response = self.grok.chat.completions.create(
                 model=groq_model,
                 messages=messages,
                 tools=groq_formatted_tools if groq_formatted_tools else None,
-                temperature=0.2
+                temperature=0.4,
+                name="kayfa-agent-tools-routing",
+                user_id=current_user_id
             )
 
             assistant_message = response.choices[0].message
-            final_outputs = []
+            if not assistant_message.tool_calls:
+                return assistant_message.content if assistant_message.content else ""
 
-            if assistant_message.content:
-                final_outputs.append(assistant_message.content)
+            messages.append(assistant_message)
+            
+            for tool_call in assistant_message.tool_calls:
+                tool_name = tool_call.function.name
+                tool_args = json.loads(tool_call.function.arguments)
 
-            if assistant_message.tool_calls:
-                messages.append(assistant_message)
-                
-                for tool_call in assistant_message.tool_calls:
-                    tool_name = tool_call.function.name
-                    tool_args = json.loads(tool_call.function.arguments)
+                target_session = self.tool_to_session_map.get(tool_name)
+                if target_session:
+                    result = await target_session.call_tool(tool_name, tool_args)
+                    result_str = "".join([block.text for block in result.content if hasattr(block, 'text')])
+                else:
+                    result_str = f"Error: Tool {tool_name} not found on any connected MCP server."
 
-                    target_session = self.tool_to_session_map.get(tool_name)
-                    if target_session:
-                        result = await target_session.call_tool(tool_name, tool_args)
-                        result_str = "".join([block.text for block in result.content if hasattr(block, 'text')])
-                    else:
-                        result_str = f"Error: Tool {tool_name} not found on any connected MCP server."
+                messages.append({
+                    "role": "tool",
+                    "tool_call_id": tool_call.id,
+                    "name": tool_name,
+                    "content": result_str
+                })
 
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": tool_call.id,
-                        "name": tool_name,
-                        "content": result_str
-                    })
-
-                final_response = self.grok.chat.completions.create(
-                    model=groq_model,
-                    messages=messages
-                )
-                final_outputs.append(final_response.choices[0].message.content)
-
-            return "\n\n".join(final_outputs)
+            final_response = self.grok.chat.completions.create(
+                model=groq_model,
+                messages=messages,
+                name="kayfa-agent-final-response",
+                user_id=current_user_id
+            )
+            return final_response.choices[0].message.content
             
         except Exception:
             response = self.grok.chat.completions.create(
                 model=groq_model,
                 messages=messages,
-                temperature=0.2
+                temperature=0.2,
+                name="kayfa-agent-fallback",
+                user_id=current_user_id
             )
             return response.choices[0].message.content
 
@@ -454,18 +598,14 @@ class MCPClient:
         if self.sessions:
             await self.exit_stack.aclose()
 
-# ==============================================================================
-# 7. CHAT INTERFACE RENDER (STREAMLIT)
-# ==============================================================================
-st.markdown("<br>", unsafe_allow_html=True)
-st.subheader("💬 Chat AI Assistant (General & Data Analysis)")
 
 def is_arabic_line(text: str) -> bool:
     arabic_chars = set(chr(x) for x in range(0x0600, 0x06FF))
     return any(char in arabic_chars for char in text)
 
 def render_styled_message(role: str, content: str):
-    with st.chat_message(role):
+    avatar_to_show = r"c:\Users\ELZAHBIA\Downloads\mortarboard.png" if role == "assistant" else None
+    with st.chat_message(role, avatar=avatar_to_show):
         lines = content.split("\n")
         inside_code_block = False
         current_block = []
@@ -498,85 +638,138 @@ def render_styled_message(role: str, content: str):
                     unsafe_allow_html=True
                 )
 
-# عرض تاريخ المحادثة
-for msg in st.session_state.messages:
-    render_styled_message(msg["role"], msg["content"])
+# ==============================================================================
+# 7. CONDITIONAL VIEW RENDERING & ROUTING
+# ==============================================================================
 
-st.markdown("---")
+# --- VIEW 1: AI CHAT VIEW ---
+if st.session_state.current_view == "chat":
+    st.markdown("<br>", unsafe_allow_html=True)
+    for msg in st.session_state.messages:
+        render_styled_message(msg["role"], msg["content"])
 
-# إدخال المطور المدمج
-input_col1, input_col2 = st.columns([1, 12], gap="small")
+    st.markdown("---")
+    input_col1, input_col2 = st.columns([1, 12], gap="small")
 
-with input_col1:
-    with st.popover("➕", help="Upload datasets for analysis", use_container_width=True):
-        uploaded_files = st.file_uploader(
-            "Upload CSV datasets", 
-            type=["csv"], 
-            accept_multiple_files=True,
-            key="chat_uploader"
-        )
-        if uploaded_files:
-            current_files_dict = {}
-            for file in uploaded_files:
+    with input_col1:
+        with st.popover("➕", help="Upload datasets for analysis", use_container_width=True):
+            uploaded_files = st.file_uploader("Upload CSV datasets", type=["csv"], accept_multiple_files=True, key="chat_uploader")
+            if uploaded_files:
+                current_files_dict = {}
+                for file in uploaded_files:
+                    try:
+                        df_temp = pd.read_csv(file)
+                        current_files_dict[file.name] = df_temp
+                        st.success(f"📎 {file.name} loaded successfully!")
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+                st.session_state.uploaded_files_dict = current_files_dict
+            else:
+                st.session_state.uploaded_files_dict = {}
+
+    with input_col2:
+        prompt = st.chat_input("Hi, I'm Kayfa, how can I help you? 😊")
+
+    if prompt:
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        render_styled_message("user", prompt)
+
+    if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
+        with st.chat_message("assistant", avatar=r"c:\Users\ELZAHBIA\Downloads\mortarboard.png"):
+            with st.spinner("Thinking..."):
+                async def run_mcp_pipeline():
+                    client = MCPClient()
+                    try:
+                        if os.path.exists(path):
+                            try:
+                                await client.connect_to_server(path)
+                            except Exception as e:
+                                st.error(f"Error connecting to Python server: {e}")
+
+                        if os.path.exists(path2):
+                            try:
+                                await client.connect_to_server(path2)
+                            except Exception as e:
+                                st.error(f"Error connecting to HubSpot JS server: {e}")
+                        
+                        last_user_query = st.session_state.messages[-1]["content"]
+                        res = await client.process_query(last_user_query)
+                        return res
+                    except Exception as e:
+                        return f"Error during execution: {e}"
+                    finally:
+                        await client.cleanup()
+
                 try:
-                    df_temp = pd.read_csv(file)
-                    current_files_dict[file.name] = df_temp
-                    st.success(f"📎 {file.name} loaded successfully!")
-                except Exception as e:
-                    st.error(f"Error: {e}")
-            st.session_state.uploaded_files_dict = current_files_dict
-        else:
-            st.session_state.uploaded_files_dict = {}
+                    response = asyncio.run(run_mcp_pipeline())
+                    clean_response = response.strip()
 
-with input_col2:
-    prompt = st.chat_input("Ask me anything, or click the (+) button to upload datasets to analyze!")
-
-if prompt:
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    render_styled_message("user", prompt)
-
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            
-            async def run_mcp_pipeline():
-                client = MCPClient()
-                try:
-                    if os.path.exists(path):
-                        try:
-                            await client.connect_to_server(path)
-                        except Exception as e:
-                            st.error(f"Error connecting to Python server: {e}")
-
-                    if os.path.exists(path2):
-                        try:
-                            await client.connect_to_server(path2)
-                        except Exception as e:
-                            st.error(f"Error connecting to HubSpot JS server: {e}")
+                    unwanted_phrases = [
+                        "Here's a thinking process", "Output matches response",
+                        "Self-Correction", "Proceeds.", "[Output Generation]",
+                        "Final check", "✅"
+                    ]
                     
-                    res = await client.process_query(prompt)
-                    return res
+                    for phrase in unwanted_phrases:
+                        if phrase in clean_response:
+                            clean_response = clean_response.split(phrase)[-1].strip()
+                    
+                    if "Yes," in clean_response or "نعم" in clean_response or "Hi" in clean_response or "مرحبا" in clean_response:
+                        lines = clean_response.split("\n")
+                        for i, line in enumerate(lines):
+                            if line.strip() and not line.strip().startswith("*") and not line.strip().startswith("["):
+                                clean_response = "\n".join(lines[i:]).strip()
+                                break
+                                
                 except Exception as e:
-                    return f"Error during execution: {e}"
-                finally:
-                    await client.cleanup()
+                    clean_response = f"حدث خطأ أثناء معالجة الطلب: {e}"
 
-            # --- التعديل الآمن هنا ---
-            # لتجنب تدمير الـ Event Loop الخاص بسيرفر Streamlit/Starlette الأساسي
-            try:
-                response = asyncio.run(run_mcp_pipeline())
-            except RuntimeError:
-                # إذا كنا بالفعل داخل Loop، نقوم بإنشاء Task فرعي معزول تماماً
-                new_loop = asyncio.new_event_loop()
-                response = new_loop.run_until_complete(run_mcp_pipeline())
-                new_loop.close()
-            # ------------------------
+                # 🎯 Force flush the callback queue so Langfuse receives metrics updates immediately
+                try:
+                    if hasattr(Settings, "callback_manager"):
+                        for handler in Settings.callback_manager.handlers:
+                            if hasattr(handler, "flush"):
+                                handler.flush()
+                except Exception:
+                    pass
 
-            st.session_state.messages.append({"role": "assistant", "content": response})
+                st.session_state.messages.append({"role": "assistant", "content": clean_response})
+                st.rerun()
+
+    if st.session_state.uploaded_files_dict:
+        loaded_names = ", ".join(st.session_state.uploaded_files_dict.keys())
+        st.caption(f"📁 **Active Datasets for Analysis:** {loaded_names}")
+    else:
+        st.caption("Note: Dashboard is fully operational. Use the (+) button to attach data analysis files anytime.")
+
+# --- VIEW 2: CREDENTIALS VIEW ---
+elif st.session_state.current_view == "credentials":
+    st.markdown("<br>", unsafe_allow_html=True)
+    
+    # 🔌 الاستدعاء المباشر للموديول النظيف لتفادي تجمد الواجهة ومشاكل ثبات البيانات
+    if run_admin_dashboard is not None:
+        try:
+            run_admin_dashboard()
+        except Exception as e:
+            st.error(f"❌ حدث خطأ أثناء تشغيل صفحة الـ Credentials: {e}")
+    else:
+        # Fallback Interface inside the main box if script is unreached
+        with st.container():
+            st.markdown('<div class="credentials-box">', unsafe_allow_html=True)
+            st.markdown("<h4 style='text-align: center; color: white; margin-bottom: 20px;'>Kayfa Authentic Stuff</h4>", unsafe_allow_html=True)
             
-    st.rerun()
-
-if st.session_state.uploaded_files_dict:
-    loaded_names = ", ".join(st.session_state.uploaded_files_dict.keys())
-    st.caption(f"📁 **Active Datasets for Analysis:** {loaded_names}")
-else:
-    st.caption("Note: Dashboard is fully operational. Use the (+) button to attach data analysis files anytime.")
+            email_input = st.text_input("Email Address / Username", value=st.session_state.user_email, placeholder="name@kayfa.ai")
+            password_input = st.text_input("Password", value=st.session_state.user_password, type="password", placeholder="••••••••")
+            
+            st.markdown("<br>", unsafe_allow_html=True)
+            if st.button("Save & Link Credentials", use_container_width=True, type="primary"):
+                if email_input and password_input:
+                    st.session_state.user_email = email_input
+                    st.session_state.user_password = password_input
+                    st.success("🔒 Credentials verified and mapped successfully!")
+                    time.sleep(1)
+                    st.session_state.current_view = "chat"
+                    st.rerun()
+                else:
+                    st.error("Please fill out both fields.")
+            st.markdown('</div>', unsafe_allow_html=True)
