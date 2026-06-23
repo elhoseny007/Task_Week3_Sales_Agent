@@ -1,21 +1,11 @@
-# Streamlit & Data
 streamlit
 pandas
-
-# LlamaIndex Core & Extensions
 llama-index-core
 llama-index-llms-groq
 llama-index-embeddings-huggingface
-
-# Langfuse Integration
-langfuse
-
-# Groq Official SDK
+langfuse>=2.0.0
+llama-index-callbacks-langfuse
 groq
-
-# Model Context Protocol (MCP) Client
 mcp
-
-# Environment Variables & Async Utilities
 python-dotenv
 asyncio
