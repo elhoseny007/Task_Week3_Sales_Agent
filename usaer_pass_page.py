@@ -71,7 +71,8 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
         langfuse_client = Langfuse(
             public_key=pub_key,
             secret_key=sec_key,
-            host="https://us.cloud.langfuse.com"
+            host="https://us.cloud.langfuse.com",
+            httpx_timeout=30.0
         )
         
         generations = langfuse_client.get_generations(limit=100)
