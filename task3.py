@@ -802,7 +802,7 @@ if st.session_state.current_view == "chat":
         render_styled_message("user", prompt)
 
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        with st.chat_message("assistant", avatar=r"c:\Users\ELZAHBIA\Downloads\mortarboard.png"):
+        with st.chat_message("assistant", avatar=r"mortarboard.png"):
             with st.spinner("Thinking..."):
                 async def run_mcp_pipeline():
                     client = MCPClient()
