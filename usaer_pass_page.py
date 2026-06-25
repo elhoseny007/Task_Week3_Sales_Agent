@@ -65,15 +65,17 @@ def get_mongo_tickets():
 # 📊 LANGFUSE METRICS FETCHING
 # ==============================================================================
 def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
-    """جلب المقاييس من حساب Langfuse الخاص بك وتفصيل التكلفة"""
-    os.environ["LANGFUSE_TIMEOUT"] = "30"
-    os.environ["LANGFUSE_HTTPX_TIMEOUT"] = "30"
+    """جلب المقاييس من حساب Langfuse الخاص بك وتفصيل التكلفة بأمان تام متوافق مع الـ Deploy"""
     try:
+        # 🎯 تأمين وقت الانتظار عبر المتغيرات البيئية لمنع الـ Read Timeout والـ Unexpected argument تماماً
+        os.environ["LANGFUSE_TIMEOUT"] = "30"
+        os.environ["LANGFUSE_HTTPX_TIMEOUT"] = "30"
+        
+        # تعريف الكلاينت "نظيف" بدون أي بارامترز مسببة للتعارض داخل الأقواس 👇
         langfuse_client = Langfuse(
             public_key=pub_key,
             secret_key=sec_key,
-            host="https://us.cloud.langfuse.com",
-            httpx_timeout=30.0
+            host="https://us.cloud.langfuse.com"
         )
         
         generations = langfuse_client.get_generations(limit=100)
@@ -151,7 +153,6 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
     except Exception as e:
         logger.error(f"Error connecting to Langfuse API: {str(e)}")
         return {"total_cost": 0.0, "calls_count": 0, "total_tokens": 0, "unique_users": [], "status": "error", "error": str(e)}
-
 # ==============================================================================
 # 🎨 UI COMPONENTS & RENDERING UTILS
 # ==============================================================================
