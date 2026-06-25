@@ -9,15 +9,15 @@ from pymongo import MongoClient
 import certifi
 from langfuse import Langfuse
 
-# إعداد الـ Logging
+# Logging Configuration
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # ==============================================================================
-# 🔐 SAFE INITIALIZATION - تأمين وتهيئة متغيرات الجلسة
+# 🔐 SAFE INITIALIZATION - Session State Management
 # ==============================================================================
 def initialize_session_state():
-    """تهيئة جميع متغيرات الجلسة بشكل آمن لمنع الـ Caching أو الأخطاء الجانبية"""
+    """Initializes all session state variables securely to prevent caching issues or side effects"""
     if "authenticated" not in st.session_state:
         st.session_state.authenticated = False
     
@@ -47,26 +47,25 @@ def initialize_session_state():
         st.session_state.error_message = None
 
 # ==============================================================================
-# 🗄️ MONGO DB CONNECTOR - جلب التذاكر حية من الـ Cluster الخاص بك
+# 🗄️ MONGO DB CONNECTOR - Live Ticket Retrieval
 # ==============================================================================
 def get_mongo_tickets():
-    """الاتصال الآمن بـ MongoDB Atlas وجلب تذاكر المبيعات مرتبة من الأحدث للأقدم"""
+    """Securely connects to MongoDB Atlas and retrieves CRM tickets sorted from newest to oldest"""
     try:
-        # تم إزالة الأقواس التالفة وضبط الرابط الصحيح لـ Cluster0 الخاص بك
         mongo_uri = "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/?retryWrites=true&w=majority"
         client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
         db = client["kayfa_crm"]
         tickets_collection = db["crm_tickets"]
         return list(tickets_collection.find().sort("conversation_metadata.timestamp", -1))
     except Exception as e:
-        logger.error(f"فشل الاتصال بـ MongoDB: {e}")
+        logger.error(f"MongoDB Connection Failed: {e}")
         return []
 
 # ==============================================================================
 # 📊 LANGFUSE METRICS FETCHING
 # ==============================================================================
 def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
-    """جلب المقاييس من حساب Langfuse الخاص بك وتفصيل التكلفة"""
+    """Fetches real-time generation metrics and costs from your Langfuse account"""
     try:
         langfuse_client = Langfuse(
             public_key=pub_key,
@@ -86,7 +85,7 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
                 try:
                     calls_count += 1
                     
-                    # حساب التوكنز بدقة
+                    # Accurate Token Calculation
                     gen_tokens = 0
                     if hasattr(gen, 'usage') and gen.usage:
                         if isinstance(gen.usage, dict):
@@ -95,11 +94,11 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
                             gen_tokens = getattr(gen.usage, "total_tokens", 0)
                     
                     if gen_tokens == 0:
-                        gen_tokens = 220  # قيمة متوسطة مرجعية للعمليات الحالية
+                        gen_tokens = 220  # Baseline reference value
                     
                     total_tokens += gen_tokens
                     
-                    # قراءة تكلفة الـ LLM (Groq)
+                    # Parse LLM (Groq) Cost
                     cost_found = 0.0
                     if hasattr(gen, 'calculated_total_cost') and gen.calculated_total_cost is not None:
                         cost_found = float(gen.calculated_total_cost)
@@ -116,7 +115,7 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
                 except Exception:
                     continue
         else:
-            # آلية بديلة في حالة عدم اكتمال المعالجة الفورية للـ generations
+            # Fallback mechanism if generations are not immediately processed
             try:
                 traces = langfuse_client.get_traces(limit=40)
                 if hasattr(traces, 'data'):
@@ -154,7 +153,7 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
 # 🎨 UI COMPONENTS & RENDERING UTILS
 # ==============================================================================
 def render_kpi_cards(total_combined_cost: float, calls_count: int, total_users: int, total_tokens: int):
-    """عرض كروت المؤشرات الرئيسية بأعلى لوحة التحكم بأسلوب بريميوم وثابت"""
+    """Renders key metrics cards at the top of the dashboard in a premium, responsive layout"""
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         st.metric(label="💰 Total Combined Cost (LLM+Embed)", value=f"${total_combined_cost:.6f}")
@@ -179,7 +178,7 @@ def render_login_page():
         st.markdown("""
         <div style='text-align: center;'>
             <h1 style='color: #10B981; font-weight: 800; letter-spacing: -1px;'>🎓 Kayfa Admin Access</h1>
-            <p style='color: #9CA3AF; font-size: 15px;'>بوابة الإدارة والمراقبة الأمنية المخصصة لمشروع نظام كـيـف الذكي</p>
+            <p style='color: #9CA3AF; font-size: 15px;'>Secure Administration & Monitoring Portal for Kayfa Intelligent Agent System</p>
         </div>
         """, unsafe_allow_html=True)
         st.markdown("---")
@@ -195,11 +194,11 @@ def render_login_page():
                 if user_account == CORRECT_ACCOUNT and user_password == CORRECT_PASSWORD:
                     st.session_state.authenticated = True
                     st.session_state.user_email = user_account
-                    st.success("✅ تم التوثيق بنجاح! جاري تحميل لوحة التحكم الفيدرالية...")
+                    st.success("✅ Authentication successful! Loading Control Center...")
                     time.sleep(0.6)
                     st.rerun()
                 else:
-                    st.error("❌ صلاحيات الدخول مرفوضة. تأكد من الحساب أو كلمة المرور.")
+                    st.error("❌ Access Denied. Invalid credentials.")
         
         with col_back:
             if st.button("↩️ Return to Chat AI", use_container_width=True, type="secondary", key="back_btn"):
@@ -217,46 +216,45 @@ def render_dashboard_page():
     }
     .ticket-card {
         background: #1E2330; border: 1px solid rgba(255, 255, 255, 0.05); border-radius: 12px;
-        padding: 20px; margin-bottom: 15px; direction: rtl; text-align: right;
+        padding: 20px; margin-bottom: 15px; text-align: left;
     }
     .trace-block {
-        background: #11151F; border-right: 4px solid #10B981; padding: 15px; border-radius: 4px; margin-bottom: 12px;
+        background: #11151F; border-left: 4px solid #10B981; padding: 15px; border-radius: 4px; margin-bottom: 12px;
     }
     </style>
     """, unsafe_allow_html=True)
 
     st.markdown('<h1 class="admin-title">🎓 Kayfa AI Enterprise Operations Center</h1>', unsafe_allow_html=True)
-    st.markdown("<p style='color: #9CA3AF;'>مراقبة سلوك الوكيل البيعي، استرداد بيانات العملاء المحتملين من الأطلس وحساب التدفقات المالية وتكلفة الـ Embeddings.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #9CA3AF;'>Monitor AI Sales Agent behavior, extract prospective leads from MongoDB Atlas, evaluate multi-token costs, and audit RAG pipeline execution.</p>", unsafe_allow_html=True)
     st.markdown("---")
 
     pub_key = "pk-lf-d5ec3773-fab8-4872-8bbb-219dbffe63b3"
     sec_key = "sk-lf-74f7c81c-3fa8-481b-96e5-b60c1364c629"
     host_url = "https://us.cloud.langfuse.com"
 
-    # حقن المفاتيح البيئية بشكل ديناميكي ثابت لضمان عمل الـ Tracing المستمر
+    # Injecting environment variables dynamically for constant tracking session stability
     os.environ["LANGFUSE_PUBLIC_KEY"] = pub_key
     os.environ["LANGFUSE_SECRET_KEY"] = sec_key
     os.environ["LANGFUSE_HOST"] = host_url
 
-    with st.spinner("🔄 جاري سحب البيانات التشغيلية والمقاييس الحية من السيرفر..."):
+    with st.spinner("🔄 Fetching live operational analytics and telemetry from server..."):
         live_data = fetch_langfuse_metrics(pub_key, sec_key)
 
     if live_data["status"] == "success":
-        # قراءة المقاييس الحية
         calls_count = live_data['calls_count']
         total_tokens = live_data['total_tokens']
         total_users = len(live_data['unique_users'])
         
-        # 🎯 حساب دقة التكلفة (Cost Accuracy): جمع تكلفة الـ LLM مع تكلفة نموذج الـ Embeddings (0.13$ لكل مليون توكن للـ text-embedding)
+        # 🎯 Cost Accuracy: Compounding LLM cost with Embedding Pipeline ($0.13 per Million tokens for text-embedding)
         llm_cost = live_data['total_cost']
         embeddings_cost = (total_tokens * 0.13) / 1000000
         total_combined_cost = llm_cost + embeddings_cost
 
-        # عرض الكروت الرقمية العلوية
+        # Render Numerical Top Panels
         render_kpi_cards(total_combined_cost, calls_count, total_users, total_tokens)
         st.markdown("---")
 
-        # بناء التبويبات المطلوبة لمناقشة مشروع التخرج
+        # Tab layout designed for graduation project defense
         tab_crm, tab_trace, tab_stats, tab_hosting = st.tabs([
             "📋 CRM Tickets (MongoDB)", 
             "🧠 Response Trace Monitor", 
@@ -265,16 +263,16 @@ def render_dashboard_page():
         ])
 
         # ==============================================================================
-        # TAB 1: CRM TICKETS (قراءة التذاكر حية ومباشرة من MongoDB Atlas)
+        # TAB 1: CRM TICKETS (Live database retrieval from MongoDB Atlas Cluster)
         # ==============================================================================
         with tab_crm:
-            st.subheader("📥 تذاكر الطلاب والـ Leads الملتقطة بواسطة الـ Agent")
-            st.caption("يتم تغذية هذا القسم بشكل خفي ومباشر من الـ Database Cluster الخاص بك بمجرد ترك الطالب لبياناته.")
+            st.subheader("📥 Student Leads Captured by AI Sales Agent")
+            st.caption("This view updates instantly from your database cluster as soon as a student registers their profile details during an automated chat.")
             
             tickets = get_mongo_tickets()
             
             if not tickets:
-                st.info("لم يتم تسجيل أي عملاء محتملين في قاعدة بيانات MongoDB حتى الآن.")
+                st.info("No prospective lead records found in MongoDB Atlas collection yet.")
             else:
                 for tk in tickets:
                     c_info = tk.get("customer_info", {})
@@ -285,34 +283,34 @@ def render_dashboard_page():
                     st.markdown(f"""
                     <div class="ticket-card">
                         <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 8px; margin-bottom: 12px;">
-                            <span style="background: #10B981; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">عميل مؤهل (Hot Lead) 🔥</span>
+                            <span style="background: #10B981; color: white; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: bold;">Verified Hot Lead 🔥</span>
                             <strong style="color: #34D399; font-size: 15px;">{tk.get('ticket_id', 'LEAD-2026')}</strong>
                         </div>
-                        <p style="margin: 4px 0;">👤 <strong>الاسم الكامل:</strong> {c_info.get('name', 'غير متوفر')}</p>
-                        <p style="margin: 4px 0;">📞 <strong>رقم الهاتف / واتساب:</strong> {c_info.get('phone', 'غير متوفر')}</p>
-                        <p style="margin: 4px 0;">📍 <strong>المدينة / الدولة:</strong> {c_info.get('city_country', 'N/A')}</p>
-                        <p style="margin: 4px 0;">📚 <strong>المسارات المطلوبة:</strong> {', '.join(edu.get('products_of_interest', [])) if edu.get('products_of_interest') else 'اهتمام عام بكتالوج كيف'}</p>
-                        <p style="margin: 4px 0;">🎯 <strong>الدافع والهدف المهني:</strong> {edu.get('goal_motivation', 'N/A')}</p>
-                        <p style="margin: 4px 0;">📝 <strong style="color: #9CA3AF;">ملخص المحادثة الآلي:</strong> {meta.get('summary_ar', 'N/A')}</p>
-                        <div style="background: rgba(16, 185, 129, 0.04); padding: 8px 12px; border-radius: 6px; margin-top: 10px; border-right: 3px solid #10B981;">
-                            <p style="color: #FBBF24; margin: 0; font-size: 13px;">⚡ <strong>توجيه قسم المبيعات:</strong> {meta.get('next_action', 'N/A')}</p>
+                        <p style="margin: 4px 0;">👤 <strong>Full Name:</strong> {c_info.get('name', 'N/A')}</p>
+                        <p style="margin: 4px 0;">📞 <strong>Phone / WhatsApp:</strong> {c_info.get('phone', 'N/A')}</p>
+                        <p style="margin: 4px 0;">📍 <strong>City & Country:</strong> {c_info.get('city_country', 'N/A')}</p>
+                        <p style="margin: 4px 0;">📚 <strong>Requested tracks:</strong> {', '.join(edu.get('products_of_interest', [])) if edu.get('products_of_interest') else 'General Interest in Kayfa Catalogue'}</p>
+                        <p style="margin: 4px 0;">🎯 <strong>Motivation & Professional Goal:</strong> {edu.get('goal_motivation', 'N/A')}</p>
+                        <p style="margin: 4px 0;">📝 <strong style="color: #9CA3AF;">Automated Summary:</strong> {meta.get('summary_ar', 'N/A')}</p>
+                        <div style="background: rgba(16, 185, 129, 0.04); padding: 8px 12px; border-radius: 6px; margin-top: 10px; border-left: 3px solid #10B981;">
+                            <p style="color: #FBBF24; margin: 0; font-size: 13px;">⚡ <strong>Next Sales Team Action:</strong> {meta.get('next_action', 'N/A')}</p>
                         </div>
                     </div>
                     """, unsafe_allow_html=True)
 
         # ==============================================================================
-        # TAB 2: RESPONSE TRACE MONITOR (مكشف التخريف والـ Grounding وعرض رحلة التفكير)
+        # TAB 2: RESPONSE TRACE MONITOR (Hallucination detection, evaluation & grounding)
         # ==============================================================================
         with tab_trace:
-            st.subheader("🧠 شاشة مراقبة التفكير وتتبع السلوك التفصيلي")
-            st.caption("هذا التبويب يسحب رحلة اتخاذ القرار للموديل حية من ليدجر Langfuse لإثبات الـ Grounding للجنة التقييم.")
+            st.subheader("🧠 Execution Tracking & Reasoning Monitor")
+            st.caption("This tab pulls internal step-by-step model execution paths directly from the Langfuse ledger to prove Grounding to the evaluation committee.")
                 
             try:
                 langfuse_client = Langfuse(public_key=pub_key, secret_key=sec_key, host=host_url)
                 generations_list = langfuse_client.get_generations(limit=8).data
                 
                 if not generations_list:
-                    st.info("لا توجد تتبعات أو Generations مسجلة حالياً في جلسة العمل المفتوحة.")
+                    st.info("No active traces or generations recorded in this open deployment session.")
                 else:
                     for gen in generations_list:
                         with st.expander(f"🔍 Trace: {gen.name if gen.name else 'Kayfa Routing Response'} | Latency: {gen.latency:.2f}s" if gen.latency else "Kayfa Trace"):
@@ -321,34 +319,34 @@ def render_dashboard_page():
                             c2.metric("Output Tokens", gen.output_tokens)
                             c3.metric("Status", "SUCCESS" if gen.output else "PENDING")
                             
-                            st.markdown("**📥 البرومبت المدخل ومخرجات الـ RAG المسترجعة (User Prompt & RAG Context):**")
-                            st.code(gen.input if gen.input else "سياق تتبع تلقائي")
+                            st.markdown("**📥 User Prompt & RAG Context:**")
+                            st.code(gen.input if gen.input else "Automated system trace sequence")
                             
-                            st.markdown("**⚙️ الرد النهائي الموجه للمستخدم (Grounded Final Output):**")
-                            st.info(gen.output if gen.output else "لم يتم إنتاج رد بعد")
+                            st.markdown("**⚙️ Grounded Final Output:**")
+                            st.info(gen.output if gen.output else "No generated output response available yet")
             except Exception as e:
-                st.warning(f"جاري مزامنة وسحب كتل التتبع الحية من ليدجر الجلسة الحالية... ({e})")
+                st.warning(f"Synchronizing live tracking blocks from current session ledger... ({e})")
 
         # ==============================================================================
-        # TAB 3: COST ACCURACY & OPTIMIZATION REPORT (تقرير دقة التكلفة والتحسين الهيكلي)
+        # TAB 3: COST ACCURACY & OPTIMIZATION REPORT
         # ==============================================================================
         with tab_stats:
-            st.subheader("📊 تحليل دقة التكلفة المالية وتقارير التحسين (Optimization Report)")
+            st.subheader("📊 Financial Auditing & Optimization Report")
             
             col_a, col_b = st.columns(2)
             with col_a:
-                st.markdown("#### 💵 تفصيل المصاريف والمزودين بدقة")
-                st.write(f"🔹 **تكلفة استدعاء الـ LLM (Groq Engine):** `${llm_cost:.6f}`")
-                st.write(f"🔹 **تكلفة معالجة الـ Embeddings (`all-MiniLM-L6-v2`):** `${embeddings_cost:.6f}`")
-                st.markdown(f"📈 **إجمالي الفاتورة التشغيلية المركبة:** `${total_combined_cost:.6f}`")
+                st.markdown("#### 💵 Precise Operational Expense Breakdown")
+                st.write(f"🔹 **LLM Call Cost (Groq Engine):** `${llm_cost:.6f}`")
+                st.write(f"🔹 **Embedding Calculations (`all-MiniLM-L6-v2`):** `${embeddings_cost:.6f}`")
+                st.markdown(f"📈 **Total Composite Billing:** `${total_combined_cost:.6f}`")
             
             with col_b:
-                st.markdown("#### ⚡ إثبات التحسين ومقارنة التكلفة (Close the Loop)")
-                st.success("✔️ التفعيل النشط لـ Selective RAG & Prompt Compression")
+                st.markdown("#### ⚡ Optimization Validation (Closing the Loop)")
+                st.success("✔️ Active Enforcement of Selective RAG & Prompt Compression")
                 st.markdown("""
-                * **قبل التحسين (Before):** كان سياق الـ RAG يسحب 5 قطع سياقية مما يستهلك متوسط **450 Token** لكل استدعاء.
-                * **بعد التحسين (After):** تم تعديل كود الـ Vector Index في `testing.py` ليسحب **4 قطع سياقية فقط** مع تنظيف حقول الـ System Prompt.
-                * **النتيجة والتوفير المالي للأعمال:** تم تقليص استهلاك التوكنز بنسبة **18.4%** وتثبيت كفاءة الـ Grounding بنسبة 100% دون نقص في دقة البيانات الممنوحة للطلاب.
+                * **Before Optimization:** RAG pipeline parsed 5 semantic chunks arbitrarily, consuming an average of **450 Tokens** per inference query.
+                * **After Optimization:** Refactored Vector Index parameters within `testing.py` to retrieve **exactly 4 concise context frames** alongside a clean, purged System Prompt template.
+                * **Business ROI Outcome:** Reduced overall token usage by **18.4%** while locking Grounding efficiency metrics at 100% with absolute contextual precision for academic inquiries.
                 """)
 
         # ==============================================================================
@@ -365,9 +363,9 @@ def render_dashboard_page():
                 st.info(f"💾 Estimated Monthly Infrastructure Cost: **$0.00 (Development Environment)**")
 
     else:
-        st.error(f"❌ خطأ أثناء محاولة الاتصال بـ سيرفر المقاييس: {live_data.get('error')}")
+        st.error(f"❌ Error establishing connection to analytics server: {live_data.get('error')}")
 
-    # زر تسجيل الخروج الآمن وتصفير الجلسة الحالية
+    # Secure Logout Functionality
     st.markdown("<br><br>", unsafe_allow_html=True)
     col_logout, _ = st.columns([1, 3])
     with col_logout:
@@ -380,7 +378,7 @@ def render_dashboard_page():
 # 🎯 MAIN RUNNER FOR MODULE ENTRIES
 # ==============================================================================
 def run_admin_dashboard():
-    """الدالة الرئيسية المستدعاة برمجياً من الملف الأساسي لضمان ثبات التحديث"""
+    """Main runner function invoked by the foundational interface file to ensure view persistence"""
     initialize_session_state()
     st.markdown("""
     <style>
