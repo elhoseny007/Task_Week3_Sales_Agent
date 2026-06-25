@@ -3,7 +3,7 @@ pandas
 llama-index-core
 llama-index-llms-groq
 llama-index-embeddings-huggingface
-langfuse>=2.0.0
+langfuse>=2.57.0
 llama-index-callbacks-langfuse
 groq
 mcp
