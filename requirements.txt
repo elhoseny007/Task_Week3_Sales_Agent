@@ -12,3 +12,4 @@ asyncio
 python-dotenv
 pymongo
 certifi
+nodejs
