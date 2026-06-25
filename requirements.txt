@@ -9,3 +9,6 @@ groq
 mcp
 python-dotenv
 asyncio
+python-dotenv
+pymongo
+certifi
