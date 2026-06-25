@@ -1,15 +1,79 @@
 import json
 import pandas as pd
+import uuid
+import os
+import smtplib
 from datetime import datetime
 from typing import List, Dict, Any
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# مكتبات MongoDB الرسمية مع شهادة الأمان لمنع كراش الاتصال
+from pymongo import MongoClient
+import certifi
 
 from mcp.server.fastmcp import FastMCP
 
 # Initialize MCP Server
 mcp = FastMCP("stock-ai-tools")
 
-# ====================== TOOLS ======================
-
+# ==============================================================================
+# 🎯 NEW TOOL: MONGODB CRM LEAD CAPTURING
+# ==============================================================================
+@mcp.tool()
+async def save_kayfa_crm_lead(
+    customer_name: str,
+    phone: str,
+    email: str,
+    city: str,
+    current_level: str,
+    products_of_interest: str,
+    goal: str,
+    conversation_summary: str
+) -> str:
+    """
+    Use this tool to save a qualified customer lead/ticket into MongoDB CRM Atlas 
+    whenever the user provides their contact info (Name, Phone/WhatsApp, Email, City) 
+    or exhibits strong buying signals for Kayfa programs.
+    """
+    try:
+        # الرابط الصريح والمؤمن لقاعدة البيانات الخاصة بك
+        mongo_uri = "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/"
+        client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
+        
+        db = client["kayfa_crm"]
+        tickets_collection = db["crm_tickets"]
+        
+        ticket = {
+            "ticket_id": f"LEAD-2026-{uuid.uuid4().hex[:4].upper()}",
+            "customer_info": {
+                "name": customer_name,
+                "phone": phone,
+                "email": email,
+                "city_country": city,
+            },
+            "educational_profile": {
+                "current_level": current_level,         
+                "products_of_interest": products_of_interest, 
+                "goal_motivation": goal                 
+            },
+            "sales_signals": {
+                "lead_temperature": "hot",       
+                "buying_signals": "العميل ترك بياناته طواعية للتواصل الفوري ومتابعة الحجز",
+                "objections_handled": "تم توجيهه وتوضيح تفاصيل دبلومات منصة كيف الفاخرة"
+            },
+            "conversation_metadata": {
+                "summary_ar": conversation_summary,      
+                "timestamp": datetime.now()
+            }
+        }
+        
+        tickets_collection.insert_one(ticket)
+        return f"✅ Success: Lead captured and registered into MongoDB with Ticket ID: {ticket['ticket_id']}"
+        
+    except Exception as e:
+        return f"❌ Failed to save lead to MongoDB CRM: {str(e)}"
+        
 @mcp.tool()
 async def get_stock_info(symbol: str) -> str:
     """Get basic information and current price for a stock symbol"""
@@ -50,7 +114,6 @@ async def get_stock_recommendation(symbol: str) -> str:
     """Get investment recommendation (Buy, Sell, Hold) for a specific stock with target price and analysis."""
     symbol_upper = symbol.upper()
     
-    # محاكاة ذكية للتوصيات بناءً على الرموز الشهيرة
     if symbol_upper in ["NVDA", "TSLA", "AMD", "AAPL"]:
         rec = "STRONG BUY"
         target = "$290.00"
@@ -107,9 +170,44 @@ Market Summary (Mock Data):
 • Top Losers: Some traditional stocks
     """
 
+# 🎯 التعديل والإصلاح الجوهري هنا:
+@mcp.tool()
+async def send_confirmation_email(user_email: str, user_name: str, experience_level: str) -> str:
+    """
+    Send a confirmation and onboarding email to the user when they provide their enrollment details 
+    (Name, Email, and Experience level) for Kayfa programs.
+    """
+    sender_email = "your_academy@gmail.com"
+    sender_password = "your_app_password"  # باسورد التطبيقات الخاص بحساب جوجل (App Password)
+    
+    msg = MIMEMultipart()
+    msg['From'] = sender_email
+    msg['To'] = user_email
+    msg['Subject'] = "تأكيد التسجيل في برنامج Data Science - منصة كيفَ"
+    
+    body = f"""
+أهلاً يا {user_name}،
+
+تم استلام بياناتك بنجاح لمستوى ({experience_level}):
+برجاء العلم أنه تم تسجيلك مبدئياً في برنامج الـ Data Science وجاري تحضير جدول المحاضرات وإرساله لك قريباً.
+
+بالتوفيق،
+فريق العمل بمنصة كيفَ
+    """
+    msg.attach(MIMEText(body, 'plain', 'utf-8'))
+    
+    try:
+        # الاتصال بسيرفر جوجل لإرسال الإيميل حقيقياً
+        server = smtplib.SMTP('smtp.gmail.com', 587)
+        server.starttls()
+        server.login(sender_email, sender_password)
+        server.send_message(msg)
+        server.quit()
+        return f"SUCCESS: Confirmation email sent successfully to {user_email}!"
+    except Exception as e:
+        return f"ERROR: Failed to send email due to: {str(e)}"
+
+
 # ====================== MAIN ======================
 if __name__ == "__main__":
-    # التشغيل الصريح عبر stdio لضمان التوافق الكامل مع الـ Client في Streamlit
     mcp.run(transport="stdio")
-
-
