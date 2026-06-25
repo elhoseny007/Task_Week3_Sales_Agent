@@ -77,7 +77,7 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
             secret_key=sec_key,
             host="https://us.cloud.langfuse.com"
         )
-        
+             
         generations = langfuse_client.get_generations(limit=100)
         
         total_tokens = 0
@@ -153,6 +153,8 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
     except Exception as e:
         logger.error(f"Error connecting to Langfuse API: {str(e)}")
         return {"total_cost": 0.0, "calls_count": 0, "total_tokens": 0, "unique_users": [], "status": "error", "error": str(e)}
+
+
 # ==============================================================================
 # 🎨 UI COMPONENTS & RENDERING UTILS
 # ==============================================================================
