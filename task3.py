@@ -731,7 +731,7 @@ def is_arabic_line(text: str) -> bool:
     return any(char in arabic_chars for char in text)
 
 def render_styled_message(role: str, content: str):
-    avatar_to_show = r"c:\Users\ELZAHBIA\Downloads\mortarboard.png" if role == "assistant" else None
+    avatar_to_show = r"mortarboard.png" if role == "assistant" else None
     with st.chat_message(role, avatar=avatar_to_show):
         lines = content.split("\n")
         inside_code_block = False
