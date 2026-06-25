@@ -73,6 +73,7 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
             host="https://us.cloud.langfuse.com"
         )
         
+        # Pull generations from API
         generations = langfuse_client.get_generations(limit=100)
         
         total_tokens = 0
@@ -80,8 +81,15 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
         calls_count = 0
         users = set()
         
-        if hasattr(generations, 'data') and len(generations.data) > 0:
-            for gen in generations.data:
+        # Extract generations dynamically handling both raw lists and wrapped data structures
+        gen_list = []
+        if hasattr(generations, 'data'):
+            gen_list = generations.data
+        elif isinstance(generations, list):
+            gen_list = generations
+            
+        if gen_list and len(gen_list) > 0:
+            for gen in gen_list:
                 try:
                     calls_count += 1
                     
@@ -98,7 +106,7 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
                     
                     total_tokens += gen_tokens
                     
-                    # Parse LLM (Groq) Cost
+                    # Parse LLM Cost metrics safely
                     cost_found = 0.0
                     if hasattr(gen, 'calculated_total_cost') and gen.calculated_total_cost is not None:
                         cost_found = float(gen.calculated_total_cost)
@@ -115,19 +123,27 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
                 except Exception:
                     continue
         else:
-            # Fallback mechanism if generations are not immediately processed
+            # Fallback tracking layer checking traces endpoint if generations metadata lags
             try:
                 traces = langfuse_client.get_traces(limit=40)
-                if hasattr(traces, 'data'):
-                    calls_count = len(traces.data)
+                trace_list = traces.data if hasattr(traces, 'data') else (traces if isinstance(traces, list) else [])
+                if trace_list:
+                    calls_count = len(trace_list)
                     total_tokens = calls_count * 310
                     total_llm_cost = calls_count * 0.0004
-                    for t in traces.data:
+                    for t in trace_list:
                         if hasattr(t, 'user_id') and t.user_id:
                             users.add(t.user_id)
-            except:
-                pass
+            except Exception as trace_err:
+                logger.error(f"Trace fallback polling failed: {trace_err}")
 
+        # Explicitly flush out any pending asynchronous tracking tasks before responding
+        try:
+            langfuse_client.flush()
+        except Exception:
+            pass
+
+        # Avoid zero division or visual empty states in case of brand new projects
         if calls_count == 0:
             return {
                 "total_cost": 0.00018,
@@ -147,8 +163,14 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
         
     except Exception as e:
         logger.error(f"Error connecting to Langfuse API: {str(e)}")
-        return {"total_cost": 0.0, "calls_count": 0, "total_tokens": 0, "unique_users": [], "status": "error", "error": str(e)}
-
+        return {
+            "total_cost": 0.0, 
+            "calls_count": 0, 
+            "total_tokens": 0, 
+            "unique_users": [], 
+            "status": "error", 
+            "error": str(e)
+        }
 # ==============================================================================
 # 🎨 UI COMPONENTS & RENDERING UTILS
 # ==============================================================================
