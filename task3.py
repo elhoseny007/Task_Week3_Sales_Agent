@@ -27,8 +27,8 @@ from groq import Groq
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
-# التعديل الصحيح لاستيراد كلاس التتبع المتوافق مع Groq وتجنب كراش الـ Import
-from langfuse.openai import OpenAI as LangfuseOpenAI
+# استيراد الـ Langfuse الرئيسي للتحكم الكامل يدوياً في الـ Tracing
+from langfuse import Langfuse
 
 # 🔌 إعداد موديول لوحة التحكم لمنع الـ Caching الناتجة عن الـ exec
 sys.path.append(r"C:\Users\ELZAHBIA\Vs_code")
@@ -39,22 +39,16 @@ except ImportError:
 
 from dotenv import load_dotenv
 load_dotenv()
-from langfuse import Langfuse
 
+# ==============================================================================
+# 🎯 INITIALIZE LANGFUSE CLIENT
+# ==============================================================================
 lf = Langfuse(
     public_key=os.getenv("LANGFUSE_PUBLIC_KEY", "pk-lf-d5ec3773-fab8-4872-8bbb-219dbffe63b3"),
     secret_key=os.getenv("LANGFUSE_SECRET_KEY", "sk-lf-74f7c81c-3fa8-481b-96e5-b60c1364c629"),
     host="https://us.cloud.langfuse.com"
 )
 
-trace = lf.trace(
-    name="manual-test",
-    user_id="test-user"
-)
-
-lf.flush()
-
-print("sent")
 # ==============================================================================
 # 1. PAGE CONFIGURATION & THEMING
 # ==============================================================================
@@ -84,7 +78,7 @@ html, body, [class*="css"] {
     color: #FFFFFF !important;
 }
 
-/* 1. جعل كل صناديق الرسائل تنكمش على قد الكلام بالظبط */
+/* جعل كل صناديق الرسائل تنكمش على قد الكلام بالظبط */
 [data-testid="stChatMessage"] {
     width: fit-content !important;
     max-width: 80% !important; 
@@ -92,7 +86,7 @@ html, body, [class*="css"] {
     margin-bottom: 12px !important;
 }
 
-/* 2. نقل رسائل المستخدم (User) بالكامل إلى جهة اليمين */
+/* نقل رسائل المستخدم (User) بالكامل إلى جهة اليمين */
 [data-testid="stChatMessage"]:has(img[src*="user"]),
 [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"] span:contains("👤")) {
     margin-left: auto !important;   
@@ -100,7 +94,7 @@ html, body, [class*="css"] {
     flex-direction: row-reverse !important; 
 }
 
-/* 3. تثبيت رسائل البوت (Assistant) في جهة اليسار */
+/* تثبيت رسائل البوت (Assistant) في جهة اليسار */
 [data-testid="stChatMessage"]:has(img[src*="Kayfa"]),
 [data-testid="stChatMessage"]:has(img[src*="education"]),
 [data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatar"] span:contains("🤖")) {
@@ -108,7 +102,7 @@ html, body, [class*="css"] {
     margin-left: 0 !important;
 }
 
-/* 4. تحسين محاذاة النصوص والمحتويات الداخلية */
+/* تحسين محاذاة النصوص والمحتويات الداخلية */
 [data-testid="stChatMessageContent"] {
     width: fit-content !important;
     text-align: right !important; 
@@ -231,7 +225,7 @@ html, body, [class*="css"] {
 col_logo, col_title = st.columns([1, 4])
 with col_logo:
     try:
-        st.image(r"mortarboard.png", width=180)
+        st.image(r"Kayfa_logo.png", width=180)
     except:
         pass
 with col_title:
@@ -258,6 +252,58 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==============================================================================
+# CRM & DATABASE SUBSYSTEM (MongoDB)
+# ==============================================================================
+from pymongo import MongoClient
+import certifi
+from datetime import datetime
+
+def save_crm_ticket(customer_name, phone, email, city, current_level, products_of_interest, goal, conversation_summary, intent_status="hot"):
+    """
+    دالة لحفظ تذكرة العميل المحتمل مباشرة في MongoDB Atlas باللغة العربية
+    """
+    try:
+        # تصحيح طريقة جلب الرابط البيئي لعدم حدوث كراش واستخدام الرابط الصريح المؤمن
+        mongo_uri = os.getenv('MONGO_URI', "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/")
+        client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
+        
+        db = client["kayfa_crm"]
+        tickets_collection = db["crm_tickets"]
+        
+        ticket = {
+            "ticket_id": f"LEAD-2026-{uuid.uuid4().hex[:4].upper()}",
+            "customer_info": {
+                "name": customer_name,
+                "phone": phone,
+                "email": email,
+                "city_country": city,
+            },
+            "educational_profile": {
+                "current_level": current_level,         
+                "products_of_interest": products_of_interest, 
+                "goal_motivation": goal                 
+            },
+            "sales_signals": {
+                "lead_temperature": intent_status,       
+                "buying_signals": "استفسر عن طرق الدفع والتسجيل",
+                "objections_handled": "تم توضيح خيارات التقسيط وقيمة الشهادة"
+            },
+            "conversation_metadata": {
+                "summary_ar": conversation_summary,      
+                "next_action": "يتواصل أحد مندوبي المبيعات عبر واتساب خلال ٢٤ ساعة لتأكيد التسجيل",
+                "timestamp": datetime.now()
+            }
+        }
+        
+        result = tickets_collection.insert_one(ticket)
+        print(f"✅ Ticket captured and saved to MongoDB with ID: {ticket['ticket_id']}")
+        return True, ticket["ticket_id"]
+        
+    except Exception as e:
+        print(f"❌ Failed to save ticket to MongoDB: {e}")
+        return False, str(e)
+
+# ==============================================================================
 # 2. STATE INITIALIZATION
 # ==============================================================================
 if "uploaded_files_dict" not in st.session_state:
@@ -267,7 +313,7 @@ if "current_view" not in st.session_state:
     st.session_state.current_view = "chat"
 
 if "user_email" not in st.session_state:
-    st.session_state.user_email = ""
+    st.session_state.user_email = "elhosenyhassan007@kayfa.com" # قيمة افتراضية صالحة للربط بـ Langfuse
 
 if "user_password" not in st.session_state:
     st.session_state.user_password = ""
@@ -356,9 +402,6 @@ if not Groq_api_key:
     st.error("🚨 Critical Error: `GROQ_API_KEY` is missing from environment variables.")
     st.stop()
 
-if not os.environ.get("OPENAI_API_KEY"):
-    os.environ["OPENAI_API_KEY"] = Groq_api_key
-
 groq_model = 'qwen/qwen3.6-27b'  
 embedding_model = 'sentence-transformers/all-MiniLM-L6-v2'
 path = r"my_mcp_server.py"
@@ -433,11 +476,8 @@ class MCPClient:
     def __init__(self):
         self.sessions: list[ClientSession] = []
         self.exit_stack = AsyncExitStack()
-        
-        self.grok = LangfuseOpenAI(
-            api_key=Groq_api_key,
-            base_url="https://api.groq.com/openai/v1"
-        )
+        # استخدام الـ SDK الرسمي لـ Groq لضمان جلب حسابات التوكنز بدقة وبدون توافقية خاطئة
+        self.groq_client = Groq(api_key=Groq_api_key)
         self.tool_to_session_map = {}
 
     async def connect_to_server(self, server_script_path: str):
@@ -484,6 +524,18 @@ class MCPClient:
         return groq_formatted_tools
 
     async def process_query(self, query: str) -> str:
+        # 1. جلب بيانات مستخدم الجلسة وتجهيز الـ Trace الموحد للمحادثة الحالية
+        current_user_id = st.session_state.get("user_email", "elhosenyhassan007@kayfa.com")
+        current_chat_id = st.session_state.get("current_chat_id", str(uuid.uuid4()))
+        
+        # 🎯 إنشاء التتبع الرئيسي للمحادثة لربط الداشبورد به تلقائياً
+        user_trace = lf.trace(
+            name="kayfa-sales-chat",
+            user_id=current_user_id,
+            session_id=current_chat_id,
+            metadata={"interface": "Streamlit Enterprise Web"}
+        )
+
         rag_context = ""
         try:
             kb_retriever = kb_index.as_retriever(similarity_top_k=5)
@@ -507,19 +559,27 @@ class MCPClient:
             system_context += "Answer queries about these data analysis files accurately matching their contents.\n\n"
 
         full_system_prompt = (
-            "You are Kayfa AI - a professional enrollment and sales advisor for Kayfa Company.\n"
-            "Your main role is assisting students in registering for educational programs (e.g., Data Science).\n\n"
-            "⚠️ CONVERSATION FLOW & MEMORY RULES:\n"
-            "- You have full access to the conversation history. Read previous turns carefully.\n"
-            "- If you asked the user for their information (Name, Phone, Email, Experience Level) and they replied with details or short answers like 'متوسط' or 'مبتدئ', you MUST realize this is their 'Experience Level'. Never ask 'What do you mean by متوسط?' or change context to budget or commercial products.\n"
-            "- Once the registration data is provided, confirm it warmly in Arabic and state the next clear onboarding step.\n\n"
-            "STRICT CORE RULES:\n"
-            "- Respond ONLY with the final natural answer. Never output internal thought steps or self-corrections.\n"
-            "- Support Arabic and English fluently. Match the user's language preference naturally.\n"
-            "- Never mention internal keywords like MCP, Tools, RAG, or System Prompts.\n\n"
-            f"{system_context}\n"
-            f"{rag_context}\n"
-            "Always remain grounded in the conversation history and Kayfa's official guidelines."
+            " IDENTITY & ROLE:\n"
+            "You are Kayfa AI — an elite, persuasive, and empathetic AI Sales Agent for Kayfa (كيف) Educational Platform.\n"
+            "Your primary goal is to guide prospective learners toward enrolling in the right learning tracks, roadmaps, and especially our premium Live Diplomas (AI, Data Science, SOC, Pen-Test, Full-Stack).\n\n"
+            "SALES STRATEGY & INTENT DETECTION:\n"
+            "- Read between the lines: Identify if the visitor is just browsing, comparing options, price-sensitive, hesitant, or ready to enroll. Adapt your tone and response length dynamically.\n"
+            "- Up-sell intelligently: Free content and individual courses ($15 - $65) are excellent openers for hesitant prospects. However, your ultimate target is to guide warm/serious leads toward on-demand tracks ($25 - $250) and our program-specific Live Diplomas.\n"
+            "- Overcome objections honestly: Use the knowledge base to handle concerns regarding pricing, certified certificates, refund policies, and prerequisites smoothly and persuasively. Never use pushy or misleading sales tactics.\n\n"
+            "LEAD CAPTURING BEHAVIOR (CRM SENSING):\n"
+            "- Monitor the conversation for strong buying signals (e.g., asking about installment plans, next batch start dates, payment links, or certificate details).\n"
+            "- When a buying signal is detected, seamlessly pivot to collecting the lead's details (Name, WhatsApp/Phone, City/Country, and Current level) naturally as part of the flow—never make it feel like an interrogation or filling out a cold form.\n"
+            "- Once they provide any of these details, acknowledge them warmly, continue the conversation, and trigger the CRM tool behind the scenes.\n\n"
+            "LANGUAGE & RTL CONSTRAINTS:\n"
+            "- You are fully bilingual. Speak fluently in Arabic (as your primary focus) and English, matching the user's preferred language and dialect naturally.\n"
+            "- You must handle and understand Egyptian (المصرية), Saudi (السعودية), and Syrian (السورية) dialects flawlessly, adapting your phrasing to connect with the user.\n"
+            "- Technical terms and course names (e.g., SOC Track Diploma, Power BI, Python, Splunk, Linux) MUST be kept in their original English/Latin form within the Arabic responses (Do NOT translate them literally).\n\n"
+            "STRICT GROUNDING RULES (NO HALLUCINATION):\n"
+            "- Rely EXCLUSIVELY on the retrieved knowledge base text below for prices, durations, curriculum details, and refund policies. If the information is not present, states clearly that you don't know and offer to connect them with a human advisor.\n"
+            "- Never invent a course, price, instructor, or discount. A sales agent who hallucinates a price is a liability.\n"
+            "- Output ONLY the final natural response to the user. Never expose internal chain-of-thought, self-corrections, or phrases like '[Output Generation]' or 'Thinking Process'.\n\n"
+            f"RETRIEVED CATALOG KNOWLEDGE BASE:\n{rag_context}\n\n"
+            "Maintain your sales persona strictly. Read the entire conversation history below to ensure context consistency."
         )
         
         messages = [{"role": "system", "content": full_system_prompt}]
@@ -527,39 +587,78 @@ class MCPClient:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": query})
 
-        current_user_id = st.session_state.get("user_email", "elhosenyhassan007@kayfa.com")
-        if not current_user_id:
-            current_user_id = "anonymous-kayfa-user"
+        # 🎯 تسجيل بداية أول معالجة كـ Generation صريح لـ Langfuse ليرى المدخلات
+        routing_generation = user_trace.generation(
+            name="Kayfa Agent Tools Routing",
+            model=groq_model,
+            input=messages
+        )
 
         if not self.sessions:
-            response = self.grok.chat.completions.create(
-                model=groq_model,
-                messages=messages,
-                temperature=0.3,
-                name="kayfa-sales-chat",
-                user_id=current_user_id
+            # تشغيل الـ Sync بشكل آمن ومتوافق داخل سياق الـ Async
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None, 
+                lambda: self.groq_client.chat.completions.create(
+                    model=groq_model,
+                    messages=messages,
+                    temperature=0.3
+                )
             )
+            final_content = response.choices[0].message.content if response.choices[0].message.content else ""
+            
+            # إنهاء الـ Generation وحفظ البيانات بدقة للداشبورد
+            routing_generation.end(
+                output=final_content,
+                usage={
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens
+                }
+            )
+            lf.flush()
+            return final_content
 
         try:
             groq_formatted_tools = await self._get_all_tools()
-            response = self.grok.chat.completions.create(
-                model=groq_model,
-                messages=messages,
-                tools=groq_formatted_tools if groq_formatted_tools else None,
-                temperature=0.4,
-                name="kayfa-agent-tools-routing",
-                user_id=current_user_id
+            
+            loop = asyncio.get_event_loop()
+            response = await loop.run_in_executor(
+                None,
+                lambda: self.groq_client.chat.completions.create(
+                    model=groq_model,
+                    messages=messages,
+                    tools=groq_formatted_tools if groq_formatted_tools else None,
+                    temperature=0.4
+                )
             )
 
             assistant_message = response.choices[0].message
+            
+            # تحديث الـ Generation الحالي ببيانات التوجيه الأولى
+            routing_generation.end(
+                output=assistant_message.content if assistant_message.content else "Tool routing requested",
+                usage={
+                    "input_tokens": response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens
+                }
+            )
+
             if not assistant_message.tool_calls:
+                lf.flush()
                 return assistant_message.content if assistant_message.content else ""
 
-            messages.append(assistant_message)
+            messages.append({
+                "role": "assistant",
+                "content": assistant_message.content,
+                "tool_calls": response.choices[0].message.tool_calls
+            })
             
             for tool_call in assistant_message.tool_calls:
                 tool_name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
+
+                # 🎯 تسجيل الـ Tool Call كـ Span فرعي لرحلة التتبع الحقيقية
+                tool_span = user_trace.span(name=f"MCP Tool Call: {tool_name}", input=tool_args)
 
                 target_session = self.tool_to_session_map.get(tool_name)
                 if target_session:
@@ -568,6 +667,9 @@ class MCPClient:
                 else:
                     result_str = f"Error: Tool {tool_name} not found on any connected MCP server."
 
+                # إغلاق تتبع الـ Tool بنجاح
+                tool_span.end(output=result_str)
+
                 messages.append({
                     "role": "tool",
                     "tool_call_id": tool_call.id,
@@ -575,23 +677,49 @@ class MCPClient:
                     "content": result_str
                 })
 
-            final_response = self.grok.chat.completions.create(
+            # 🎯 إنشاء Generation ثاني وأخير لحساب المخرجات النهائية والتوكنز الكلية للرد
+            final_generation = user_trace.generation(
+                name="Kayfa Final Grounded Output",
                 model=groq_model,
-                messages=messages,
-                name="kayfa-agent-final-response",
-                user_id=current_user_id
+                input=messages
             )
-            return final_response.choices[0].message.content
+
+            final_response = await loop.run_in_executor(
+                None,
+                lambda: self.groq_client.chat.completions.create(
+                    model=groq_model,
+                    messages=messages
+                )
+            )
             
-        except Exception:
-            response = self.grok.chat.completions.create(
-                model=groq_model,
-                messages=messages,
-                temperature=0.2,
-                name="kayfa-agent-fallback",
-                user_id=current_user_id
+            final_content = final_response.choices[0].message.content
+            
+            # إرسال المخرجات النهائية وحساب التكلفة الفورية للـ Dashboard
+            final_generation.end(
+                output=final_content,
+                usage={
+                    "input_tokens": final_response.usage.prompt_tokens,
+                    "output_tokens": final_response.usage.completion_tokens
+                }
             )
-            return response.choices[0].message.content
+            
+            lf.flush() # دفع حزم البيانات فوراً لخوادم لانجفيوز
+            return final_content
+            
+        except Exception as e:
+            routing_generation.end(status_message=str(e), level="ERROR")
+            
+            loop = asyncio.get_event_loop()
+            fallback_response = await loop.run_in_executor(
+                None,
+                lambda: self.groq_client.chat.completions.create(
+                    model=groq_model,
+                    messages=messages,
+                    temperature=0.2
+                )
+            )
+            lf.flush()
+            return fallback_response.choices[0].message.content
 
     async def cleanup(self):
         if self.sessions:
@@ -603,7 +731,7 @@ def is_arabic_line(text: str) -> bool:
     return any(char in arabic_chars for char in text)
 
 def render_styled_message(role: str, content: str):
-    avatar_to_show = r"mortarboard.png" if role == "assistant" else None
+    avatar_to_show = r"c:\Users\ELZAHBIA\Downloads\mortarboard.png" if role == "assistant" else None
     with st.chat_message(role, avatar=avatar_to_show):
         lines = content.split("\n")
         inside_code_block = False
@@ -674,7 +802,7 @@ if st.session_state.current_view == "chat":
         render_styled_message("user", prompt)
 
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        with st.chat_message("assistant", avatar=r"mortarboard.png"):
+        with st.chat_message("assistant", avatar=r"c:\Users\ELZAHBIA\Downloads\mortarboard.png"):
             with st.spinner("Thinking..."):
                 async def run_mcp_pipeline():
                     client = MCPClient()
@@ -723,7 +851,7 @@ if st.session_state.current_view == "chat":
                 except Exception as e:
                     clean_response = f"حدث خطأ أثناء معالجة الطلب: {e}"
 
-                # 🎯 Force flush the callback queue so Langfuse receives metrics updates immediately
+                # التطهير الإجباري لطابور كولباك LlamaIndex إذا وجد
                 try:
                     if hasattr(Settings, "callback_manager"):
                         for handler in Settings.callback_manager.handlers:
@@ -745,14 +873,12 @@ if st.session_state.current_view == "chat":
 elif st.session_state.current_view == "credentials":
     st.markdown("<br>", unsafe_allow_html=True)
     
-    # 🔌 الاستدعاء المباشر للموديول النظيف لتفادي تجمد الواجهة ومشاكل ثبات البيانات
     if run_admin_dashboard is not None:
         try:
             run_admin_dashboard()
         except Exception as e:
             st.error(f"❌ حدث خطأ أثناء تشغيل صفحة الـ Credentials: {e}")
     else:
-        # Fallback Interface inside the main box if script is unreached
         with st.container():
             st.markdown('<div class="credentials-box">', unsafe_allow_html=True)
             st.markdown("<h4 style='text-align: center; color: white; margin-bottom: 20px;'>Kayfa Authentic Stuff</h4>", unsafe_allow_html=True)
