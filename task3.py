@@ -263,7 +263,6 @@ def save_crm_ticket(customer_name, phone, email, city, current_level, products_o
     دالة لحفظ تذكرة العميل المحتمل مباشرة في MongoDB Atlas باللغة العربية
     """
     try:
-        # تصحيح طريقة جلب الرابط البيئي لعدم حدوث كراش واستخدام الرابط الصريح المؤمن
         mongo_uri = os.getenv('MONGO_URI', "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/")
         client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
         
@@ -313,7 +312,7 @@ if "current_view" not in st.session_state:
     st.session_state.current_view = "chat"
 
 if "user_email" not in st.session_state:
-    st.session_state.user_email = "elhosenyhassan007@kayfa.com" # قيمة افتراضية صالحة للربط بـ Langfuse
+    st.session_state.user_email = "elhosenyhassan007@kayfa.com"
 
 if "user_password" not in st.session_state:
     st.session_state.user_password = ""
@@ -326,7 +325,6 @@ if "all_chats" not in st.session_state:
     st.session_state.all_chats = {first_chat_id: []}
     st.session_state.current_chat_id = first_chat_id
 
-# Link active conversation reference safely
 st.session_state.messages = st.session_state.all_chats[st.session_state.current_chat_id]
 
 
@@ -360,7 +358,6 @@ with st.sidebar:
         
     st.markdown("<br>", unsafe_allow_html=True)
 
-    # عرض المحادثات السابقة
     if st.session_state.all_chats:
         for chat_id, messages_list in list(st.session_state.all_chats.items()):
             user_prompts = [msg["content"] for msg in messages_list if msg["role"] == "user"]
@@ -383,7 +380,6 @@ with st.sidebar:
         
     st.markdown("<br><br>", unsafe_allow_html=True)
     
-    # 🔄 زر تسجيل الخروج
     if st.session_state.get("current_view") == "credentials":
         if st.button("🚪 Log Out & Lock Dashboard", type="secondary", key="dashboard_logout", use_container_width=True):
             cost_data_backup = st.session_state.get("cost_data", None)
@@ -476,7 +472,6 @@ class MCPClient:
     def __init__(self):
         self.sessions: list[ClientSession] = []
         self.exit_stack = AsyncExitStack()
-        # استخدام الـ SDK الرسمي لـ Groq لضمان جلب حسابات التوكنز بدقة وبدون توافقية خاطئة
         self.groq_client = Groq(api_key=Groq_api_key)
         self.tool_to_session_map = {}
 
@@ -524,11 +519,9 @@ class MCPClient:
         return groq_formatted_tools
 
     async def process_query(self, query: str) -> str:
-        # 1. جلب بيانات مستخدم الجلسة وتجهيز الـ Trace الموحد للمحادثة الحالية
         current_user_id = st.session_state.get("user_email", "elhosenyhassan007@kayfa.com")
         current_chat_id = st.session_state.get("current_chat_id", str(uuid.uuid4()))
         
-        # 🎯 إنشاء التتبع الرئيسي للمحادثة لربط الداشبورد به تلقائياً
         user_trace = lf.trace(
             name="kayfa-sales-chat",
             user_id=current_user_id,
@@ -538,7 +531,8 @@ class MCPClient:
 
         rag_context = ""
         try:
-            kb_retriever = kb_index.as_retriever(similarity_top_k=5)
+            # 🎯 تحسين 1: تقليص كفاءة الـ Top-K من 5 إلى 2 لإنقاذ فواتير التوكنز والـ Input overhead
+            kb_retriever = kb_index.as_retriever(similarity_top_k=2)
             kb_results = kb_retriever.retrieve(query)
             if kb_results:
                 rag_context = "Relevant Knowledge Base Context from Kayfa Catalog:\n"
@@ -552,11 +546,10 @@ class MCPClient:
             system_context = "The user has uploaded multiple analytical datasets:\n"
             for file_name, df_local in st.session_state.uploaded_files_dict.items():
                 cols = list(df_local.columns)
-                sample_data = df_local.head(3).to_dict(orient='records')
-                system_context += f"- File Name: {file_name}\n"
-                system_context += f"  Columns: {cols}\n"
-                system_context += f"  3-row Sample Data: {json.dumps(sample_data, ensure_ascii=False)}\n\n"
-            system_context += "Answer queries about these data analysis files accurately matching their contents.\n\n"
+                # 🎯 تحسين 2: تقليص الـ Sample سطرين فقط لتقليل الـ Metadata Noise داخل الـ Prompt
+                sample_data = df_local.head(2).to_dict(orient='records')
+                system_context += f"- File Name: {file_name} | Columns: {cols}\n"
+                system_context += f"  Sample: {json.dumps(sample_data, ensure_ascii=False)}\n\n"
 
         full_system_prompt = (
             " IDENTITY & ROLE:\n"
@@ -579,6 +572,7 @@ class MCPClient:
             "- Never invent a course, price, instructor, or discount. A sales agent who hallucinates a price is a liability.\n"
             "- Output ONLY the final natural response to the user. Never expose internal chain-of-thought, self-corrections, or phrases like '[Output Generation]' or 'Thinking Process'.\n\n"
             f"RETRIEVED CATALOG KNOWLEDGE BASE:\n{rag_context}\n\n"
+            f"{system_context}"
             "Maintain your sales persona strictly. Read the entire conversation history below to ensure context consistency."
         )
         
@@ -587,27 +581,25 @@ class MCPClient:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": query})
 
-        # 🎯 تسجيل بداية أول معالجة كـ Generation صريح لـ Langfuse ليرى المدخلات
+        # إنشاء حاوية التتبع الأساسية
         routing_generation = user_trace.generation(
-            name="Kayfa Agent Tools Routing",
+            name="Kayfa Agent Execution Pipeline",
             model=groq_model,
             input=messages
         )
 
         if not self.sessions:
-            # تشغيل الـ Sync بشكل آمن ومتوافق داخل سياق الـ Async
             loop = asyncio.get_event_loop()
             response = await loop.run_in_executor(
                 None, 
                 lambda: self.groq_client.chat.completions.create(
                     model=groq_model,
                     messages=messages,
-                    temperature=0.3
+                    temperature=0.2  # 🎯 تحسين 3: تقليل الـ Temperature لمنع الهدر اللغوي والتوكنز الزائدة في المخرجات
                 )
             )
             final_content = response.choices[0].message.content if response.choices[0].message.content else ""
             
-            # إنهاء الـ Generation وحفظ البيانات بدقة للداشبورد
             routing_generation.end(
                 output=final_content,
                 usage={
@@ -628,36 +620,35 @@ class MCPClient:
                     model=groq_model,
                     messages=messages,
                     tools=groq_formatted_tools if groq_formatted_tools else None,
-                    temperature=0.4
+                    temperature=0.2
                 )
             )
 
             assistant_message = response.choices[0].message
             
-            # تحديث الـ Generation الحالي ببيانات التوجيه الأولى
-            routing_generation.end(
-                output=assistant_message.content if assistant_message.content else "Tool routing requested",
-                usage={
-                    "input_tokens": response.usage.prompt_tokens,
-                    "output_tokens": response.usage.completion_tokens
-                }
-            )
-
+            # 🎯 تحسين 4: معالجة الـ Double Call. إذا لم تكن هناك أدوات للتنفيذ، نكتفي بالـ Call الأول فوراً ولا نكرره
             if not assistant_message.tool_calls:
+                routing_generation.end(
+                    output=assistant_message.content if assistant_message.content else "",
+                    usage={
+                        "input_tokens": response.usage.prompt_tokens,
+                        "output_tokens": response.usage.completion_tokens
+                    }
+                )
                 lf.flush()
                 return assistant_message.content if assistant_message.content else ""
 
+            # في حالة وجود استدعاء لـ Tool نقوم بتسجيلها في الـ Context ومتابعة التنفيذ
             messages.append({
                 "role": "assistant",
                 "content": assistant_message.content,
-                "tool_calls": response.choices[0].message.tool_calls
+                "tool_calls": assistant_message.tool_calls
             })
             
             for tool_call in assistant_message.tool_calls:
                 tool_name = tool_call.function.name
                 tool_args = json.loads(tool_call.function.arguments)
 
-                # 🎯 تسجيل الـ Tool Call كـ Span فرعي لرحلة التتبع الحقيقية
                 tool_span = user_trace.span(name=f"MCP Tool Call: {tool_name}", input=tool_args)
 
                 target_session = self.tool_to_session_map.get(tool_name)
@@ -667,7 +658,6 @@ class MCPClient:
                 else:
                     result_str = f"Error: Tool {tool_name} not found on any connected MCP server."
 
-                # إغلاق تتبع الـ Tool بنجاح
                 tool_span.end(output=result_str)
 
                 messages.append({
@@ -677,33 +667,28 @@ class MCPClient:
                     "content": result_str
                 })
 
-            # 🎯 إنشاء Generation ثاني وأخير لحساب المخرجات النهائية والتوكنز الكلية للرد
-            final_generation = user_trace.generation(
-                name="Kayfa Final Grounded Output",
-                model=groq_model,
-                input=messages
-            )
-
+            # الاستدعاء النهائي بعد دمج التوكنز والحساب المجمع
             final_response = await loop.run_in_executor(
                 None,
                 lambda: self.groq_client.chat.completions.create(
                     model=groq_model,
-                    messages=messages
+                    messages=messages,
+                    temperature=0.2
                 )
             )
             
             final_content = final_response.choices[0].message.content
             
-            # إرسال المخرجات النهائية وحساب التكلفة الفورية للـ Dashboard
-            final_generation.end(
+            # حساب مجمع دقيق للتوكنز وإرسالها لـ Langfuse Dashboard بشكل صحيح دون تكرار
+            routing_generation.end(
                 output=final_content,
                 usage={
-                    "input_tokens": final_response.usage.prompt_tokens,
-                    "output_tokens": final_response.usage.completion_tokens
+                    "input_tokens": response.usage.prompt_tokens + final_response.usage.prompt_tokens,
+                    "output_tokens": response.usage.completion_tokens + final_response.usage.completion_tokens
                 }
             )
             
-            lf.flush() # دفع حزم البيانات فوراً لخوادم لانجفيوز
+            lf.flush() 
             return final_content
             
         except Exception as e:
@@ -851,7 +836,6 @@ if st.session_state.current_view == "chat":
                 except Exception as e:
                     clean_response = f"حدث خطأ أثناء معالجة الطلب: {e}"
 
-                # التطهير الإجباري لطابور كولباك LlamaIndex إذا وجد
                 try:
                     if hasattr(Settings, "callback_manager"):
                         for handler in Settings.callback_manager.handlers:
