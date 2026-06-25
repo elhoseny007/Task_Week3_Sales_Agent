@@ -12,7 +12,6 @@ from langfuse import Langfuse
 # إعداد الـ Logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-
 # ==============================================================================
 # 🔐 SAFE INITIALIZATION - تأمين وتهيئة متغيرات الجلسة
 # ==============================================================================
@@ -67,6 +66,8 @@ def get_mongo_tickets():
 # ==============================================================================
 def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
     """جلب المقاييس من حساب Langfuse الخاص بك وتفصيل التكلفة"""
+    os.environ["LANGFUSE_TIMEOUT"] = "30"
+    os.environ["LANGFUSE_HTTPX_TIMEOUT"] = "30"
     try:
         langfuse_client = Langfuse(
             public_key=pub_key,
