@@ -810,15 +810,15 @@ if st.session_state.current_view == "chat":
                         if os.path.exists(path):
                             try:
                                 await client.connect_to_server(path)
+                                print("✅ Python MCP Server Connected Successfully!")
                             except Exception as e:
                                 st.error(f"Error connecting to Python server: {e}")
-
                         if os.path.exists(path2):
                             try:
                                 await client.connect_to_server(path2)
                             except Exception as e:
-                                st.error(f"Error connecting to HubSpot JS server: {e}")
-                        
+                                st.sidebar.warning("⚠️ سيرفر HubSpot المساعد غير متصل حالياً، الشات يعمل عبر الكتالوج الرئيسي.")
+                
                         last_user_query = st.session_state.messages[-1]["content"]
                         res = await client.process_query(last_user_query)
                         return res
