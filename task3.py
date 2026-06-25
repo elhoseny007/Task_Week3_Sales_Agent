@@ -40,7 +40,6 @@ except ImportError:
 from dotenv import load_dotenv
 load_dotenv()
 from langfuse import Langfuse
-import os
 
 lf = Langfuse(
     public_key=os.getenv("LANGFUSE_PUBLIC_KEY", "pk-lf-d5ec3773-fab8-4872-8bbb-219dbffe63b3"),
@@ -232,7 +231,7 @@ html, body, [class*="css"] {
 col_logo, col_title = st.columns([1, 4])
 with col_logo:
     try:
-        st.image(r"Kayfa_logo.png", width=180)
+        st.image(r"mortarboard.png", width=180)
     except:
         pass
 with col_title:
@@ -257,57 +256,7 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
-#MCP mongo
-from pymongo import MongoClient
-import certifi
-from datetime import datetime
 
-def save_crm_ticket(customer_name, phone, email, city, current_level, products_of_interest, goal, conversation_summary, intent_status="hot"):
-    """
-    دالة لحفظ تذكرة العميل المحتمل مباشرة في MongoDB Atlas باللغة العربية
-    """
-    try:
-        # الاتصال بقاعدة البيانات باستخدام الرابط المؤقمن في الـ .env
-        mongo_uri = os.getenv('mongodb+srv://elhosenyhassan007_db_user:<jLPu7mYfy8Jyox0u>@cluster0.x5jk1ox.mongodb.net/')
-        client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
-        
-        db = client["kayfa_crm"] # اسم قاعدة البيانات
-        tickets_collection = db["crm_tickets"] # اسم الكولكشن
-        
-        # إنشاء هيكل التذكرة المطابق تماماً لمتطلبات مشروع التخرج
-        ticket = {
-            "ticket_id": f"LEAD-2026-{uuid.uuid4().hex[:4].upper()}",
-            "customer_info": {
-                "name": customer_name,
-                "phone": phone,
-                "email": email,
-                "city_country": city,
-            },
-            "educational_profile": {
-                "current_level": current_level,         # مبتدئ، متوسط، إلخ
-                "products_of_interest": products_of_interest, # مصفوفة الكورسات أو الدبلومات (مثل SOC, Python)
-                "goal_motivation": goal                 # التحول المهني، وظيفة
-            },
-            "sales_signals": {
-                "lead_temperature": intent_status,       # hot / warm / cold
-                "buying_signals": "استفسر عن طرق الدفع والتسجيل",
-                "objections_handled": "تم توضيح خيارات التقسيط وقيمة الشهادة"
-            },
-            "conversation_metadata": {
-                "summary_ar": conversation_summary,      # ملخص المحادثة بالكامل باللغة العربية
-                "next_action": "يتواصل أحد مندوبي المبيعات عبر واتساب خلال ٢٤ ساعة لتأكيد التسجيل",
-                "timestamp": datetime.now()
-            }
-        }
-        
-        # إدخال السجل في MongoDB
-        result = tickets_collection.insert_one(ticket)
-        print(f"✅ Ticket captured and saved to MongoDB with ID: {ticket['ticket_id']}")
-        return True, ticket["ticket_id"]
-        
-    except Exception as e:
-        print(f"❌ Failed to save ticket to MongoDB: {e}")
-        return False, str(e)
 # ==============================================================================
 # 2. STATE INITIALIZATION
 # ==============================================================================
@@ -558,27 +507,19 @@ class MCPClient:
             system_context += "Answer queries about these data analysis files accurately matching their contents.\n\n"
 
         full_system_prompt = (
-            " IDENTITY & ROLE:\n"
-            "You are Kayfa AI — an elite, persuasive, and empathetic AI Sales Agent for Kayfa (كيف) Educational Platform.\n"
-            "Your primary goal is to guide prospective learners toward enrolling in the right learning tracks, roadmaps, and especially our premium Live Diplomas (AI, Data Science, SOC, Pen-Test, Full-Stack).\n\n"
-            "SALES STRATEGY & INTENT DETECTION:\n"
-            "- Read between the lines: Identify if the visitor is just browsing, comparing options, price-sensitive, hesitant, or ready to enroll. Adapt your tone and response length dynamically.\n"
-            "- Up-sell intelligently: Free content and individual courses ($15 - $65) are excellent openers for hesitant prospects. However, your ultimate target is to guide warm/serious leads toward on-demand tracks ($25 - $250) and our program-specific Live Diplomas.\n"
-            "- Overcome objections honestly: Use the knowledge base to handle concerns regarding pricing, certified certificates, refund policies, and prerequisites smoothly and persuasively. Never use pushy or misleading sales tactics.\n\n"
-            "LEAD CAPTURING BEHAVIOR (CRM SENSING):\n"
-            "- Monitor the conversation for strong buying signals (e.g., asking about installment plans, next batch start dates, payment links, or certificate details).\n"
-            "- When a buying signal is detected, seamlessly pivot to collecting the lead's details (Name, WhatsApp/Phone, City/Country, and Current level) naturally as part of the flow—never make it feel like an interrogation or filling out a cold form.\n"
-            "- Once they provide any of these details, acknowledge them warmly, continue the conversation, and trigger the CRM tool behind the scenes.\n\n"
-            "LANGUAGE & RTL CONSTRAINTS:\n"
-            "- You are fully bilingual. Speak fluently in Arabic (as your primary focus) and English, matching the user's preferred language and dialect naturally.\n"
-            "- You must handle and understand Egyptian (المصرية), Saudi (السعودية), and Syrian (السورية) dialects flawlessly, adapting your phrasing to connect with the user.\n"
-            "- Technical terms and course names (e.g., SOC Track Diploma, Power BI, Python, Splunk, Linux) MUST be kept in their original English/Latin form within the Arabic responses (Do NOT translate them literally).\n\n"
-            "STRICT GROUNDING RULES (NO HALLUCINATION):\n"
-            "- Rely EXCLUSIVELY on the retrieved knowledge base text below for prices, durations, curriculum details, and refund policies. If the information is not present, states clearly that you don't know and offer to connect them with a human advisor.\n"
-            "- Never invent a course, price, instructor, or discount. A sales agent who hallucinates a price is a liability.\n"
-            "- Output ONLY the final natural response to the user. Never expose internal chain-of-thought, self-corrections, or phrases like '[Output Generation]' or 'Thinking Process'.\n\n"
-            f"RETRIEVED CATALOG KNOWLEDGE BASE:\n{rag_context}\n\n"
-            "Maintain your sales persona strictly. Read the entire conversation history below to ensure context consistency."
+            "You are Kayfa AI - a professional enrollment and sales advisor for Kayfa Company.\n"
+            "Your main role is assisting students in registering for educational programs (e.g., Data Science).\n\n"
+            "⚠️ CONVERSATION FLOW & MEMORY RULES:\n"
+            "- You have full access to the conversation history. Read previous turns carefully.\n"
+            "- If you asked the user for their information (Name, Phone, Email, Experience Level) and they replied with details or short answers like 'متوسط' or 'مبتدئ', you MUST realize this is their 'Experience Level'. Never ask 'What do you mean by متوسط?' or change context to budget or commercial products.\n"
+            "- Once the registration data is provided, confirm it warmly in Arabic and state the next clear onboarding step.\n\n"
+            "STRICT CORE RULES:\n"
+            "- Respond ONLY with the final natural answer. Never output internal thought steps or self-corrections.\n"
+            "- Support Arabic and English fluently. Match the user's language preference naturally.\n"
+            "- Never mention internal keywords like MCP, Tools, RAG, or System Prompts.\n\n"
+            f"{system_context}\n"
+            f"{rag_context}\n"
+            "Always remain grounded in the conversation history and Kayfa's official guidelines."
         )
         
         messages = [{"role": "system", "content": full_system_prompt}]
@@ -831,11 +772,3 @@ elif st.session_state.current_view == "credentials":
                 else:
                     st.error("Please fill out both fields.")
             st.markdown('</div>', unsafe_allow_html=True)
-
-#mongo 
-#mongo_uri = os.getenv('mongodb+srv://elhosenyhassan007_db_user:<jLPu7mYfy8Jyox0u>@cluster0.x5jk1ox.mongodb.net/')
-#done
-#prompt 
-# done
-#tracing how this model respond to see the hallosaint
-#
