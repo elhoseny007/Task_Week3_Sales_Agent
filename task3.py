@@ -417,7 +417,7 @@ def init_llama_resources():
     except Exception as e:
         st.warning(f"Langfuse LlamaIndex Handler Warning: {e}")
 
-    Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0.1, streaming=True)
+    Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0, streaming=True)
     Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
 
     vector_store = SimpleVectorStore()
