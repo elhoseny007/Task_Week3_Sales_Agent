@@ -417,7 +417,7 @@ def init_llama_resources():
     except Exception as e:
         st.warning(f"Langfuse LlamaIndex Handler Warning: {e}")
 
-    Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0, streaming=True)
+    Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0.1, streaming=True)
     Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
 
     vector_store = SimpleVectorStore()
@@ -690,7 +690,7 @@ def is_arabic_line(text: str) -> bool:
     return any(char in arabic_chars for char in text)
 
 def render_styled_message(role: str, content: str):
-    avatar_to_show = r"C:\Users\ELZAHBIA\Downloads\mortarboard.png" if role == "assistant" else None
+    avatar_to_show = r"mortarboard.png" if role == "assistant" else None
     with st.chat_message(role, avatar=avatar_to_show):
         lines = content.split("\n")
         inside_code_block = False
@@ -761,7 +761,7 @@ if st.session_state.current_view == "chat":
         render_styled_message("user", prompt)
 
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
-        with st.chat_message("assistant", avatar=r"C:\Users\ELZAHBIA\Downloads\mortarboard.png"):
+        with st.chat_message("assistant", avatar=r"mortarboard.png"):
             placeholder = st.empty()  # إنشاء الحاوية المخصصة للبث المباشر المحدث
             
             async def run_mcp_pipeline():
