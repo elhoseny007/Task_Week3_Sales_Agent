@@ -393,7 +393,7 @@ with st.sidebar:
 # ==============================================================================
 # 4. CONFIGURATIONS & CONSTANTS
 # ==============================================================================
-Groq_api_key = os.getenv("GROQ_API_KEY", "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")
+Groq_api_key = os.getenv("GROQ_API_KEY", "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")
 if not Groq_api_key:
     st.error("🚨 Critical Error: `GROQ_API_KEY` is missing from environment variables.")
     st.stop()
