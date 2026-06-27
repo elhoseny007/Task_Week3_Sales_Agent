@@ -417,7 +417,7 @@ def init_llama_resources():
     except Exception as e:
         st.warning(f"Langfuse LlamaIndex Handler Warning: {e}")
 
-    Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0)
+    Settings.llm = LlamaGroq(model=groq_model, api_key=Groq_api_key, temperature=0, streaming=True)
     Settings.embed_model = HuggingFaceEmbedding(model_name=embedding_model)
 
     vector_store = SimpleVectorStore()
@@ -518,7 +518,7 @@ class MCPClient:
                 
         return groq_formatted_tools
 
-    async def process_query(self, query: str) -> str:
+    async def process_query(self, query: str, placeholder) -> str:
         current_user_id = st.session_state.get("user_email", "elhosenyhassan007@kayfa.com")
         current_chat_id = st.session_state.get("current_chat_id", str(uuid.uuid4()))
         
@@ -531,7 +531,6 @@ class MCPClient:
 
         rag_context = ""
         try:
-            # 🎯 تحسين 1: تقليص كفاءة الـ Top-K من 5 إلى 2 لإنقاذ فواتير التوكنز والـ Input overhead
             kb_retriever = kb_index.as_retriever(similarity_top_k=2)
             kb_results = kb_retriever.retrieve(query)
             if kb_results:
@@ -546,7 +545,6 @@ class MCPClient:
             system_context = "The user has uploaded multiple analytical datasets:\n"
             for file_name, df_local in st.session_state.uploaded_files_dict.items():
                 cols = list(df_local.columns)
-                # 🎯 تحسين 2: تقليص الـ Sample سطرين فقط لتقليل الـ Metadata Noise داخل الـ Prompt
                 sample_data = df_local.head(2).to_dict(orient='records')
                 system_context += f"- File Name: {file_name} | Columnss: {cols}\n"
                 system_context += f"  Sample: {json.dumps(sample_data, ensure_ascii=False)}\n\n"
@@ -580,32 +578,39 @@ class MCPClient:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": query})
 
-        # إنشاء حاوية التتبع الأساسية
         routing_generation = user_trace.generation(
             name="Kayfa Agent Execution Pipeline",
             model=groq_model,
             input=messages
         )
 
+        # دالة داخلية للتعامل مع الـ Streaming وتحديث واجهة Streamlit كلمة بكلمة
+        def stream_response_chunks(messages_payload):
+            full_resp = ""
+            stream = self.groq_client.chat.completions.create(
+                model=groq_model,
+                messages=messages_payload,
+                temperature=0.2,
+                stream=True
+            )
+            for chunk in stream:
+                if chunk.choices[0].delta.content:
+                    full_resp += chunk.choices[0].delta.content
+                    if is_arabic_line(full_resp):
+                        placeholder.markdown(
+                            f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{full_resp}\n\n</div>', 
+                            unsafe_allow_html=True
+                        )
+                    else:
+                        placeholder.markdown(
+                            f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{full_resp}\n\n</div>', 
+                            unsafe_allow_html=True
+                        )
+            return full_resp
+
         if not self.sessions:
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None, 
-                lambda: self.groq_client.chat.completions.create(
-                    model=groq_model,
-                    messages=messages,
-                    temperature=0.1 
-                )
-            )
-            final_content = response.choices[0].message.content if response.choices[0].message.content else ""
-            
-            routing_generation.end(
-                output=final_content,
-                usage={
-                    "input_tokens": response.usage.prompt_tokens,
-                    "output_tokens": response.usage.completion_tokens
-                }
-            )
+            final_content = stream_response_chunks(messages)
+            routing_generation.end(output=final_content)
             lf.flush()
             return final_content
 
@@ -625,19 +630,18 @@ class MCPClient:
 
             assistant_message = response.choices[0].message
             
-            # 🎯 تحسين 4: معالجة الـ Double Call. إذا لم تكن هناك أدوات للتنفيذ، نكتفي بالـ Call الأول فوراً ولا نكرره
             if not assistant_message.tool_calls:
+                final_content = stream_response_chunks(messages)
                 routing_generation.end(
-                    output=assistant_message.content if assistant_message.content else "",
+                    output=final_content,
                     usage={
                         "input_tokens": response.usage.prompt_tokens,
                         "output_tokens": response.usage.completion_tokens
                     }
                 )
                 lf.flush()
-                return assistant_message.content if assistant_message.content else ""
+                return final_content
 
-            # في حالة وجود استدعاء لـ Tool نقوم بتسجيلها في الـ Context ومتابعة التنفيذ
             messages.append({
                 "role": "assistant",
                 "content": assistant_message.content,
@@ -666,44 +670,16 @@ class MCPClient:
                     "content": result_str
                 })
 
-            # الاستدعاء النهائي بعد دمج التوكنز والحساب المجمع
-            final_response = await loop.run_in_executor(
-                None,
-                lambda: self.groq_client.chat.completions.create(
-                    model=groq_model,
-                    messages=messages,
-                    temperature=0.2
-                )
-            )
-            
-            final_content = final_response.choices[0].message.content
-            
-            # حساب مجمع دقيق للتوكنز وإرسالها لـ Langfuse Dashboard بشكل صحيح دون تكرار
-            routing_generation.end(
-                output=final_content,
-                usage={
-                    "input_tokens": response.usage.prompt_tokens + final_response.usage.prompt_tokens,
-                    "output_tokens": response.usage.completion_tokens + final_response.usage.completion_tokens
-                }
-            )
-            
+            final_content = stream_response_chunks(messages)
+            routing_generation.end(output=final_content)
             lf.flush() 
             return final_content
             
         except Exception as e:
             routing_generation.end(status_message=str(e), level="ERROR")
-            
-            loop = asyncio.get_event_loop()
-            fallback_response = await loop.run_in_executor(
-                None,
-                lambda: self.groq_client.chat.completions.create(
-                    model=groq_model,
-                    messages=messages,
-                    temperature=0.2
-                )
-            )
+            final_content = stream_response_chunks(messages)
             lf.flush()
-            return fallback_response.choices[0].message.content
+            return final_content
 
     async def cleanup(self):
         if self.sessions:
@@ -737,7 +713,6 @@ def render_styled_message(role: str, content: str):
                 st.markdown("")
                 continue
 
-            # الحل الصحيح: دمج الـ HTML مع سطر الـ Markdown في استدعاء واحد لمنع كسر الحاوية
             if is_arabic_line(line):
                 st.markdown(
                     f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important;">\n\n{line}\n\n</div>', 
@@ -787,64 +762,65 @@ if st.session_state.current_view == "chat":
 
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         with st.chat_message("assistant", avatar=r"mortarboard.png"):
-            with st.spinner("Thinking..."):
-                async def run_mcp_pipeline():
-                    client = MCPClient()
-                    try:
-                        if os.path.exists(path):
-                            try:
-                                await client.connect_to_server(path)
-                                print("✅ Python MCP Server Connected Successfully!")
-                            except Exception as e:
-                                st.error(f"Error connecting to Python server: {e}")
-                        if os.path.exists(path2):
-                            try:
-                                await client.connect_to_server(path2)
-                            except Exception as e:
-                                st.sidebar.warning("⚠️ سيرفر HubSpot المساعد غير متصل حالياً، الشات يعمل عبر الكتالوج الرئيسي.")
-                
-                        last_user_query = st.session_state.messages[-1]["content"]
-                        res = await client.process_query(last_user_query)
-                        return res
-                    except Exception as e:
-                        return f"Error during execution: {e}"
-                    finally:
-                        await client.cleanup()
-
+            placeholder = st.empty()  # إنشاء الحاوية المخصصة للبث المباشر المحدث
+            
+            async def run_mcp_pipeline():
+                client = MCPClient()
                 try:
-                    response = asyncio.run(run_mcp_pipeline())
-                    clean_response = response.strip()
-
-                    unwanted_phrases = [
-                        "Here's a thinking process", "Output matches response",
-                        "Self-Correction", "Proceeds.", "[Output Generation]",
-                        "Final check", "✅"
-                    ]
-                    
-                    for phrase in unwanted_phrases:
-                        if phrase in clean_response:
-                            clean_response = clean_response.split(phrase)[-1].strip()
-                    
-                    if "Yes," in clean_response or "نعم" in clean_response or "Hi" in clean_response or "مرحبا" in clean_response:
-                        lines = clean_response.split("\n")
-                        for i, line in enumerate(lines):
-                            if line.strip() and not line.strip().startswith("*") and not line.strip().startswith("["):
-                                clean_response = "\n".join(lines[i:]).strip()
-                                break
-                                
+                    if os.path.exists(path):
+                        try:
+                            await client.connect_to_server(path)
+                            print("✅ Python MCP Server Connected Successfully!")
+                        except Exception as e:
+                            st.error(f"Error connecting to Python server: {e}")
+                    if os.path.exists(path2):
+                        try:
+                            await client.connect_to_server(path2)
+                        except Exception as e:
+                            st.sidebar.warning("⚠️ سيرفر HubSpot المساعد غير متصل حالياً، الشات يعمل عبر الكتالوج الرئيسي.")
+            
+                    last_user_query = st.session_state.messages[-1]["content"]
+                    res = await client.process_query(last_user_query, placeholder)
+                    return res
                 except Exception as e:
-                    clean_response = f"حدث خطأ أثناء معالجة الطلب: {e}"
+                    return f"Error during execution: {e}"
+                finally:
+                    await client.cleanup()
 
-                try:
-                    if hasattr(Settings, "callback_manager"):
-                        for handler in Settings.callback_manager.handlers:
-                            if hasattr(handler, "flush"):
-                                handler.flush()
-                except Exception:
-                    pass
+            try:
+                response = asyncio.run(run_mcp_pipeline())
+                clean_response = response.strip()
 
-                st.session_state.messages.append({"role": "assistant", "content": clean_response})
-                st.rerun()
+                unwanted_phrases = [
+                    "Here's a thinking process", "Output matches response",
+                    "Self-Correction", "Proceeds.", "[Output Generation]",
+                    "Final check", "✅"
+                ]
+                
+                for phrase in unwanted_phrases:
+                    if phrase in clean_response:
+                        clean_response = clean_response.split(phrase)[-1].strip()
+                
+                if "Yes," in clean_response or "نعم" in clean_response or "Hi" in clean_response or "مرحبا" in clean_response:
+                    lines = clean_response.split("\n")
+                    for i, line in enumerate(lines):
+                        if line.strip() and not line.strip().startswith("*") and not line.strip().startswith("["):
+                            clean_response = "\n".join(lines[i:]).strip()
+                            break
+                            
+            except Exception as e:
+                clean_response = f"حدث خطأ أثناء معالجة الطلب: {e}"
+
+            try:
+                if hasattr(Settings, "callback_manager"):
+                    for handler in Settings.callback_manager.handlers:
+                        if hasattr(handler, "flush"):
+                            handler.flush()
+            except Exception:
+                pass
+
+            st.session_state.messages.append({"role": "assistant", "content": clean_response})
+            st.rerun()
 
     if st.session_state.uploaded_files_dict:
         loaded_names = ", ".join(st.session_state.uploaded_files_dict.keys())
@@ -881,4 +857,4 @@ elif st.session_state.current_view == "credentials":
                 else:
                     st.error("Please fill out both fields.")
             st.markdown('</div>', unsafe_allow_html=True)
-#last without streaming
+#last with streaming
