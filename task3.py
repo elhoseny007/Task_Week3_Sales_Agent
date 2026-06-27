@@ -546,7 +546,7 @@ class MCPClient:
             for file_name, df_local in st.session_state.uploaded_files_dict.items():
                 cols = list(df_local.columns)
                 sample_data = df_local.head(2).to_dict(orient='records')
-                system_context += f"- File Name: {file_name} | Columnss: {cols}\n"
+                system_context += f"- File Name: {file_name} | Columns: {cols}\n"
                 system_context += f"  Sample: {json.dumps(sample_data, ensure_ascii=False)}\n\n"
 
         full_system_prompt = (
@@ -584,18 +584,19 @@ class MCPClient:
             input=messages
         )
 
-        # دالة داخلية للتعامل مع الـ Streaming وتحديث واجهة Streamlit كلمة بكلمة
+        # ⚡ دالة داخلية للتعامل مع الـ Streaming وتحديث واجهة سيمبليت كلمة بكلمة
         def stream_response_chunks(messages_payload):
             full_resp = ""
             stream = self.groq_client.chat.completions.create(
                 model=groq_model,
                 messages=messages_payload,
                 temperature=0.2,
-                stream=True
+                stream=True  # تفعيل بث الإجابة بالتدريج
             )
             for chunk in stream:
                 if chunk.choices[0].delta.content:
                     full_resp += chunk.choices[0].delta.content
+                    # تحديث الشاشة فوراً مع الحفاظ على الاتجاه العربي والإنكليزي
                     if is_arabic_line(full_resp):
                         placeholder.markdown(
                             f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{full_resp}\n\n</div>', 
@@ -762,7 +763,7 @@ if st.session_state.current_view == "chat":
 
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         with st.chat_message("assistant", avatar=r"mortarboard.png"):
-            placeholder = st.empty()  # إنشاء الحاوية المخصصة للبث المباشر المحدث
+            placeholder = st.empty()  # 1. إنشاء الحاوية المخصصة للبث المباشر المحدث
             
             async def run_mcp_pipeline():
                 client = MCPClient()
@@ -780,6 +781,7 @@ if st.session_state.current_view == "chat":
                             st.sidebar.warning("⚠️ سيرفر HubSpot المساعد غير متصل حالياً، الشات يعمل عبر الكتالوج الرئيسي.")
             
                     last_user_query = st.session_state.messages[-1]["content"]
+                    # 2. نمرر الـ placeholder بداخل الـ process_query ليحدث النص أولاً بأول
                     res = await client.process_query(last_user_query, placeholder)
                     return res
                 except Exception as e:
@@ -819,6 +821,7 @@ if st.session_state.current_view == "chat":
             except Exception:
                 pass
 
+            # 3. حفظ الرد النهائي بالكامل بعد انتهاء البث التفاعلي
             st.session_state.messages.append({"role": "assistant", "content": clean_response})
             st.rerun()
 
@@ -857,4 +860,3 @@ elif st.session_state.current_view == "credentials":
                 else:
                     st.error("Please fill out both fields.")
             st.markdown('</div>', unsafe_allow_html=True)
-#last with streaming
