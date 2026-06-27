@@ -594,7 +594,7 @@ class MCPClient:
                 lambda: self.groq_client.chat.completions.create(
                     model=groq_model,
                     messages=messages,
-                    temperature=0.1  # 🎯 تحسين 3: تقليل الـ Temperature لمنع الهدر اللغوي والتوكنز الزائدة في المخرجات
+                    temperature=0.1 
                 )
             )
             final_content = response.choices[0].message.content if response.choices[0].message.content else ""
@@ -709,7 +709,6 @@ class MCPClient:
         if self.sessions:
             await self.exit_stack.aclose()
 
-
 def is_arabic_line(text: str) -> bool:
     arabic_chars = set(chr(x) for x in range(0x0600, 0x06FF))
     return any(char in arabic_chars for char in text)
@@ -738,15 +737,17 @@ def render_styled_message(role: str, content: str):
                 st.markdown("")
                 continue
 
-            # الحل هنا: نضع كتل الـ Markdown داخل حاويات مخصصة للاتجاه دون تدمير الرموز
+            # الحل الصحيح: دمج الـ HTML مع سطر الـ Markdown في استدعاء واحد لمنع كسر الحاوية
             if is_arabic_line(line):
-                st.markdown(f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important;">', unsafe_allow_html=True)
-                st.markdown(line)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important;">\n\n{line}\n\n</div>', 
+                    unsafe_allow_html=True
+                )
             else:
-                st.markdown(f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important;">', unsafe_allow_html=True)
-                st.markdown(line)
-                st.markdown('</div>', unsafe_allow_html=True)
+                st.markdown(
+                    f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important;">\n\n{line}\n\n</div>', 
+                    unsafe_allow_html=True
+                )
 
 # ==============================================================================
 # 7. CONDITIONAL VIEW RENDERING & ROUTING
