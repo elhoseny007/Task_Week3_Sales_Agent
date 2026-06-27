@@ -259,9 +259,6 @@ import certifi
 from datetime import datetime
 
 def save_crm_ticket(customer_name, phone, email, city, current_level, products_of_interest, goal, conversation_summary, intent_status="hot"):
-    """
-    دالة لحفظ تذكرة العميل المحتمل مباشرة في MongoDB Atlas باللغة العربية
-    """
     try:
         mongo_uri = os.getenv('MONGO_URI', "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/")
         client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
@@ -553,6 +550,9 @@ class MCPClient:
             " IDENTITY & ROLE:\n"
             "You are Kayfa AI — an elite, persuasive, and empathetic AI Sales Agent for Kayfa (كيف) Educational Platform.\n"
             "Your primary goal is to guide prospective learners toward enrolling in the right learning tracks, roadmaps, and especially our premium Live Diplomas (AI, Data Science, SOC, Pen-Test, Full-Stack).\n\n"
+            "STRICT GENERATION RULE:\n"
+            "DO NOT write or outputs your chain of thought, reasoning steps, or internal call logic to the user. "
+            "Go straight to the final response. Never include phrases like 'Thinking Process', 'Calling Tool', or any technical JSON markdown in the text.\n\n"
             "SALES STRATEGY & INTENT DETECTION:\n"
             "- Read between the lines: Identify if the visitor is just browsing, comparing options, price-sensitive, hesitant, or ready to enroll. Adapt your tone and response length dynamically.\n"
             "- Up-sell intelligently: Free content and individual courses ($15 - $65) are excellent openers for hesitant prospects. However, your ultimate target is to guide warm/serious leads toward on-demand tracks ($25 - $250) and our program-specific Live Diplomas.\n"
@@ -567,7 +567,6 @@ class MCPClient:
             "STRICT GROUNDING RULES (NO HALLUCINATION):\n"
             "- Rely EXCLUSIVELY on the retrieved knowledge base text below for prices, durations, curriculum details, and refund policies. If the information is not present, states clearly that you don't know and offer to connect them with a human advisor.\n"
             "- Never invent a course, price, instructor, or discount. A sales agent who hallucinates a price is a liability.\n"
-            "- Output ONLY the final natural response to the user. Never expose internal chain-of-thought, self-corrections, or phrases like '[Output Generation]' or 'Thinking Process'.\n\n"
             f"RETRIEVED CATALOG KNOWLEDGE BASE:\n{rag_context}\n\n"
             f"{system_context}"
             "Maintain your sales persona strictly. Read the entire conversation history below to ensure context consistency."
@@ -584,103 +583,89 @@ class MCPClient:
             input=messages
         )
 
-        # ⚡ دالة داخلية للتعامل مع الـ Streaming وتحديث واجهة سيمبليت كلمة بكلمة
+        # ⚡ دالة بث الإجابة النهائية واستبعاد أي جمل تفكير برمجية أو داخلية
         def stream_response_chunks(messages_payload):
             full_resp = ""
             stream = self.groq_client.chat.completions.create(
                 model=groq_model,
                 messages=messages_payload,
                 temperature=0.2,
-                stream=True  # تفعيل بث الإجابة بالتدريج
+                stream=True
             )
             for chunk in stream:
                 if chunk.choices[0].delta.content:
-                    full_resp += chunk.choices[0].delta.content
-                    # تحديث الشاشة فوراً مع الحفاظ على الاتجاه العربي والإنكليزي
-                    if is_arabic_line(full_resp):
+                    text_chunk = chunk.choices[0].delta.content
+                    full_resp += text_chunk
+                    
+                    # تنظيف فوري للنصوص غير المرغوب بها أثناء الكتابة الحية
+                    clean_display = full_resp
+                    unwanted_phrases = [
+                        "Thinking Process:", "Internal Log:", "Calling Tool:",
+                        "Here's a thinking process", "Output matches response"
+                    ]
+                    for phrase in unwanted_phrases:
+                        if phrase in clean_display:
+                            clean_display = clean_display.split(phrase)[-1].strip()
+
+                    if is_arabic_line(clean_display):
                         placeholder.markdown(
-                            f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{full_resp}\n\n</div>', 
+                            f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{clean_display}\n\n</div>', 
                             unsafe_allow_html=True
                         )
                     else:
                         placeholder.markdown(
-                            f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{full_resp}\n\n</div>', 
+                            f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{clean_display}\n\n</div>', 
                             unsafe_allow_html=True
                         )
             return full_resp
 
-        if not self.sessions:
-            final_content = stream_response_chunks(messages)
-            routing_generation.end(output=final_content)
-            lf.flush()
-            return final_content
-
-        try:
-            groq_formatted_tools = await self._get_all_tools()
-            
-            loop = asyncio.get_event_loop()
-            response = await loop.run_in_executor(
-                None,
-                lambda: self.groq_client.chat.completions.create(
-                    model=groq_model,
-                    messages=messages,
-                    tools=groq_formatted_tools if groq_formatted_tools else None,
-                    temperature=0.2
+        # فحص إمكانية استدعاء الـ Tools أولاً في الخلفية
+        groq_formatted_tools = await self._get_all_tools() if self.sessions else []
+        
+        if groq_formatted_tools:
+            try:
+                loop = asyncio.get_event_loop()
+                response = await loop.run_in_executor(
+                    None,
+                    lambda: self.groq_client.chat.completions.create(
+                        model=groq_model,
+                        messages=messages,
+                        tools=groq_formatted_tools,
+                        temperature=0.1
+                    )
                 )
-            )
+                assistant_message = response.choices[0].message
+                
+                if assistant_message.tool_calls:
+                    messages.append({
+                        "role": "assistant",
+                        "content": assistant_message.content,
+                        "tool_calls": assistant_message.tool_calls
+                    })
+                    for tool_call in assistant_message.tool_calls:
+                        tool_name = tool_call.function.name
+                        tool_args = json.loads(tool_call.function.arguments)
+                        target_session = self.tool_to_session_map.get(tool_name)
+                        if target_session:
+                            result = await target_session.call_tool(tool_name, tool_args)
+                            result_str = "".join([block.text for block in result.content if hasattr(block, 'text')])
+                        else:
+                            result_str = f"Error: Tool {tool_name} not found."
+                        
+                        messages.append({
+                            "role": "tool",
+                            "tool_call_id": tool_call.id,
+                            "name": tool_name,
+                            "content": result_str
+                        })
+            except Exception:
+                pass
 
-            assistant_message = response.choices[0].message
-            
-            if not assistant_message.tool_calls:
-                final_content = stream_response_chunks(messages)
-                routing_generation.end(
-                    output=final_content,
-                    usage={
-                        "input_tokens": response.usage.prompt_tokens,
-                        "output_tokens": response.usage.completion_tokens
-                    }
-                )
-                lf.flush()
-                return final_content
-
-            messages.append({
-                "role": "assistant",
-                "content": assistant_message.content,
-                "tool_calls": assistant_message.tool_calls
-            })
-            
-            for tool_call in assistant_message.tool_calls:
-                tool_name = tool_call.function.name
-                tool_args = json.loads(tool_call.function.arguments)
-
-                tool_span = user_trace.span(name=f"MCP Tool Call: {tool_name}", input=tool_args)
-
-                target_session = self.tool_to_session_map.get(tool_name)
-                if target_session:
-                    result = await target_session.call_tool(tool_name, tool_args)
-                    result_str = "".join([block.text for block in result.content if hasattr(block, 'text')])
-                else:
-                    result_str = f"Error: Tool {tool_name} not found on any connected MCP server."
-
-                tool_span.end(output=result_str)
-
-                messages.append({
-                    "role": "tool",
-                    "tool_call_id": tool_call.id,
-                    "name": tool_name,
-                    "content": result_str
-                })
-
-            final_content = stream_response_chunks(messages)
-            routing_generation.end(output=final_content)
-            lf.flush() 
-            return final_content
-            
-        except Exception as e:
-            routing_generation.end(status_message=str(e), level="ERROR")
-            final_content = stream_response_chunks(messages)
-            lf.flush()
-            return final_content
+        # بث الرد النهائي الصافي للمستخدم كلمة بكلمة
+        final_content = stream_response_chunks(messages)
+        routing_generation.end(output=final_content)
+        lf.flush()
+        return final_content
 
     async def cleanup(self):
         if self.sessions:
@@ -763,7 +748,7 @@ if st.session_state.current_view == "chat":
 
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         with st.chat_message("assistant", avatar=r"mortarboard.png"):
-            placeholder = st.empty()  # 1. إنشاء الحاوية المخصصة للبث المباشر المحدث
+            placeholder = st.empty()  
             
             async def run_mcp_pipeline():
                 client = MCPClient()
@@ -771,17 +756,15 @@ if st.session_state.current_view == "chat":
                     if os.path.exists(path):
                         try:
                             await client.connect_to_server(path)
-                            print("✅ Python MCP Server Connected Successfully!")
                         except Exception as e:
                             st.error(f"Error connecting to Python server: {e}")
                     if os.path.exists(path2):
                         try:
                             await client.connect_to_server(path2)
                         except Exception as e:
-                            st.sidebar.warning("⚠️ سيرفر HubSpot المساعد غير متصل حالياً، الشات يعمل عبر الكتالوج الرئيسي.")
+                            st.sidebar.warning("⚠️ سيرفر HubSpot المساعد غير متصل حالياً.")
             
                     last_user_query = st.session_state.messages[-1]["content"]
-                    # 2. نمرر الـ placeholder بداخل الـ process_query ليحدث النص أولاً بأول
                     res = await client.process_query(last_user_query, placeholder)
                     return res
                 except Exception as e:
@@ -821,7 +804,6 @@ if st.session_state.current_view == "chat":
             except Exception:
                 pass
 
-            # 3. حفظ الرد النهائي بالكامل بعد انتهاء البث التفاعلي
             st.session_state.messages.append({"role": "assistant", "content": clean_response})
             st.rerun()
 
