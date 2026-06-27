@@ -548,7 +548,7 @@ class MCPClient:
                 cols = list(df_local.columns)
                 # 🎯 تحسين 2: تقليص الـ Sample سطرين فقط لتقليل الـ Metadata Noise داخل الـ Prompt
                 sample_data = df_local.head(2).to_dict(orient='records')
-                system_context += f"- File Name: {file_name} | Columns: {cols}\n"
+                system_context += f"- File Name: {file_name} | Columnss: {cols}\n"
                 system_context += f"  Sample: {json.dumps(sample_data, ensure_ascii=False)}\n\n"
 
         full_system_prompt = (
@@ -566,7 +566,6 @@ class MCPClient:
             "LANGUAGE & RTL CONSTRAINTS:\n"
             "- You are fully bilingual. Speak fluently in Arabic (as your primary focus) and English, matching the user's preferred language and dialect naturally.\n"
             "- You must handle and understand Egyptian (المصرية), Saudi (السعودية), and Syrian (السورية) dialects flawlessly, adapting your phrasing to connect with the user.\n"
-            "- Technical terms and course names (e.g., SOC Track Diploma, Power BI, Python, Splunk, Linux) MUST be kept in their original English/Latin form within the Arabic responses (Do NOT translate them literally).\n\n"
             "STRICT GROUNDING RULES (NO HALLUCINATION):\n"
             "- Rely EXCLUSIVELY on the retrieved knowledge base text below for prices, durations, curriculum details, and refund policies. If the information is not present, states clearly that you don't know and offer to connect them with a human advisor.\n"
             "- Never invent a course, price, instructor, or discount. A sales agent who hallucinates a price is a liability.\n"
@@ -595,7 +594,7 @@ class MCPClient:
                 lambda: self.groq_client.chat.completions.create(
                     model=groq_model,
                     messages=messages,
-                    temperature=0.2  # 🎯 تحسين 3: تقليل الـ Temperature لمنع الهدر اللغوي والتوكنز الزائدة في المخرجات
+                    temperature=0.1  # 🎯 تحسين 3: تقليل الـ Temperature لمنع الهدر اللغوي والتوكنز الزائدة في المخرجات
                 )
             )
             final_content = response.choices[0].message.content if response.choices[0].message.content else ""
@@ -736,19 +735,18 @@ def render_styled_message(role: str, content: str):
                 continue
 
             if line.strip() == "":
-                st.markdown("")  
+                st.markdown("")
                 continue
 
+            # الحل هنا: نضع كتل الـ Markdown داخل حاويات مخصصة للاتجاه دون تدمير الرموز
             if is_arabic_line(line):
-                st.markdown(
-                    f'<div style="direction: rtl; text-align: right; margin-bottom: 4px; color: #FFFFFF !important;">{line}</div>', 
-                    unsafe_allow_html=True
-                )
+                st.markdown(f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important;">', unsafe_allow_html=True)
+                st.markdown(line)
+                st.markdown('</div>', unsafe_allow_html=True)
             else:
-                st.markdown(
-                    f'<div style="direction: ltr; text-align: left; margin-bottom: 4px; color: #FFFFFF !important;">{line}</div>', 
-                    unsafe_allow_html=True
-                )
+                st.markdown(f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important;">', unsafe_allow_html=True)
+                st.markdown(line)
+                st.markdown('</div>', unsafe_allow_html=True)
 
 # ==============================================================================
 # 7. CONDITIONAL VIEW RENDERING & ROUTING
