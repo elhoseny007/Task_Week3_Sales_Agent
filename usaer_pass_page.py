@@ -51,17 +51,12 @@ def initialize_session_state():
 def get_mongo_tickets():
     """الاتصال الآمن بـ MongoDB Atlas وجلب تذاكر المبيعات مرتبة من الأحدث للأقدم"""
     try:
-        # استخدام الرابط السليم والمجرب بنجاح
-        mongo_uri = "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/"
+        # تم إزالة الأقواس التالفة وضبط الرابط الصحيح لـ Cluster0 الخاص بك
+        mongo_uri = "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/?retryWrites=true&w=majority"
         client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
-        
         db = client["kayfa_crm"]
         tickets_collection = db["crm_tickets"]
-        
-        # جلب البيانات بشكل مرن وحي
-        tickets = list(tickets_collection.find().sort("conversation_metadata.timestamp", -1))
-        logger.info(f" Successfully fetched {len(tickets)} tickets from MongoDB.")
-        return tickets
+        return list(tickets_collection.find().sort("conversation_metadata.timestamp", -1))
     except Exception as e:
         logger.error(f"فشل الاتصال بـ MongoDB: {e}")
         return []
@@ -513,29 +508,16 @@ def render_dashboard_page():
 # 🎯 MAIN RUNNER FOR MODULE ENTRIES
 # ==============================================================================
 def run_admin_dashboard():
-            leads_list = []
-            for ticket in tickets:
-                # استخراج الكائنات الشجرية لتسهيل القراءة بأمان
-                customer_info = ticket.get("customer_info", {})
-                educational_profile = ticket.get("educational_profile", {})
-                sales_signals = ticket.get("sales_signals", {})
-                conversation_metadata = ticket.get("conversation_metadata", {})
-                
-                # حساب التاريخ بتنسيق مقروء
-                raw_time = conversation_metadata.get("timestamp", "N/A")
-                formatted_time = raw_time.strftime("%Y-%m-%d %H:%M") if isinstance(raw_time, datetime) else str(raw_time)
-
-                leads_list.append({
-                    "ID التذكرة": ticket.get("ticket_id", "N/A"),
-                    "الاسم": customer_info.get("name", "N/A"),
-                    "رقم الهاتف": customer_info.get("phone", "N/A"),
-                    "البريد الإلكتروني": customer_info.get("email", "لم يذكر بعد"),
-                    "المدينة/الدولة": customer_info.get("city_country", "غير محدد"),
-                    "المستوى الحالي": educational_profile.get("current_level", "N/A"),
-                    "الكورسات المهتم بها": educational_profile.get("products_of_interest", "N/A"),
-                    "الهدف/الدافع": educational_profile.get("goal_motivation", "N/A"),
-                    "درجة الاهتمام": sales_signals.get("lead_temperature", "hot"),
-                    "تاريخ التسجيل": formatted_time
-                })
-
-            df = pd.DataFrame(leads_list)
+    """الدالة الرئيسية المستدعاة برمجياً من الملف الأساسي لضمان ثبات التحديث"""
+    initialize_session_state()
+    st.markdown("""
+    <style>
+        .main { padding-top: 1rem; }
+        .stButton > button { border-radius: 8px; font-weight: 600; padding: 10px 20px; }
+    </style>
+    """, unsafe_allow_html=True)
+    
+    if not st.session_state.authenticated:
+        render_login_page()
+    else:
+        render_dashboard_page()
