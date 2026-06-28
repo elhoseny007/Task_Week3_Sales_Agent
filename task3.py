@@ -291,7 +291,7 @@ def save_crm_ticket(
             },
             "sales_signals": {
                 "lead_temperature": intent_status,       
-                "buying_signals": "استفسر عن طرق الدفع والتسجيل وأدخل بياناته الأساسية"،
+                "buying_signals": "استفسر عن طرق الدفع والتسجيل وأدخل بياناته الأساسية",
                 "objections_handled": "تم توضيح الخيارات المبدئية وحفظ الليد بنجاح"
             },
             "conversation_metadata": {
