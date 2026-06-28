@@ -326,13 +326,10 @@ def render_dashboard_page():
         st.markdown("---")
 
         # 🎯 بناء التبويبات المطلوبة مع إضافة التبويب المخصص للتفكير المستقل بناءً على طلبك
-        tab_crm, tab_trace, tab_thinking, tab_stats, tab_hosting = st.tabs([
-            "📋 CRM Tickets (MongoDB)", 
-            "🧠 Response Trace Monitor", 
-            "🔮 Live Thinking Process",         # التبويب الجديد للتفكير بصوت عالٍ
-            "📊 Accurate Cost & Optimization",  # التبويب المعدل لحساب كلفة الرسالة وإجمالي الشات
-            "🖥️ Infrastructure & VPS Status"
-        ])
+        tab_crm, tab_trace, tab_stats= st.tabs([
+    "📋 CRM Tickets (MongoDB)", 
+    "🧠 Response Trace Monitor & Thinking", 
+    "📊 Accurate Cost & Optimization"])
 
         # ==============================================================================
         # TAB 1: CRM TICKETS (قراءة التذاكر حية ومباشرة من MongoDB Atlas)
@@ -397,11 +394,6 @@ def render_dashboard_page():
                             st.info(gen.output if gen.output else "لم يتم إنتاج رد بعد")
             except Exception as e:
                 st.warning(f"جاري مزامنة وسحب كتل التتبع الحية من ليدجر الجلسة الحالية... ({e})")
-
-        # ==============================================================================
-        # 🎯 TAB 3: LIVE THINKING PROCESS (عرض التفكير المقتطع من الشات الرئيسي)
-        # ==============================================================================
-        with tab_thinking:
             st.subheader("🔮 أرشيف معالجة الأفكار الحية والشجرية (Hierarchical Chat Thinking)")
             st.caption("اختر المحادثة المطلوبة من القائمة، ثم افتح الرسالة المستهدفة لاستعراض رحلة تفكير الوكيل الذكي الخاص بها.")
             
@@ -504,49 +496,14 @@ def render_dashboard_page():
                 
             st.markdown("---")
             
-            col_a, col_b = st.columns(2)
-            with col_a:
-                st.markdown("#### 💵 تفصيل فواتير الـ Tokens الحالية (System Chat Ledger)")
-                st.markdown(f"""
-                * 📥 **توكنز المدخلات للرسالة الأخيرة (Input Tokens):** `{chat_metrics['last_msg_input_tokens']:,}` توكن وتكلفتها: `${chat_metrics['last_msg_input_tokens'] * 0.0000002885:.6f}`
-                * 📤 **توكنز المخرجات + التفكير للرسالة الأخيرة (Output Tokens):** `{chat_metrics['last_msg_output_tokens']:,}` توكن وتكلفتها: `${chat_metrics['last_msg_output_tokens'] * 0.0000031700:.6f}`
-                * 📈 **إجمالي الإنفاق التراكمي للمحادثة النشطة بالكامل:** <span style='color:#10B981; font-weight:bold;'>${chat_metrics['total_cost']:.6f}</span>
-                """, unsafe_allow_html=True)
-                st.caption("📌 تم حساب هذه الفواتير بالاعتماد على أسعار Qwen المعتمدة على حسابك: Input: $0.0000002885/token | Output: $0.0000031700/token.")
-            
-            with col_b:
-                st.markdown("#### ⚡ إثبات التحسين ومقارنة التكلفة (Close the Loop)")
-                st.success("✔️ التفعيل النشط لـ Selective RAG & Prompt Compression")
-                st.markdown("""
-                * **قبل التحسين (Before):** كان سياق الـ RAG يسحب 5 قطع سياقية مما يستهلك متوسط **450 Token** لكل استدعاء.
-                * **بعد التحسين (After):** تم تعديل كود الـ Vector Index في `testing.py` ليسحب **4 قطع سياقية فقط** مع تنظيف حقول الـ System Prompt.
-                * **النتيجة والتوفير المالي للأعمال:** تم تقليص استهلاك التوكنز بنسبة **18.4%** وتثبيت كفاءة الـ Grounding بنسبة 100% دون نقص في دقة البيانات الممنوحة للطلاب.
-                """)
 
-        # ==============================================================================
-        # TAB 5: INFRASTRUCTURE & VPS STATUS
-        # ==============================================================================
-        with tab_hosting:
-            st.subheader("🖥️ Specifications & Hosting Architecture")
-            col1, col2 = st.columns(2)
-            with col1:
-                st.info(f"🟢 Deployment Status: **Active**")
-                st.info(f"🏢 Host Architecture: **Local VPS / Anaconda Ecosystem**")
-            with col2:
-                st.info(f"⚡ Embedding Model Pipeline: **Sentence-Transformers (HuggingFace Local Deployment)**")
-                st.info(f"💾 Estimated Monthly Infrastructure Cost: **$0.00 (Development Environment)**")
+            st.markdown("#### 💵 تفصيل فواتير الـ Tokens الحالية (System Chat Ledger)")
+            st.markdown(f"""
+            * 📥 **توكنز المدخلات للرسالة الأخيرة (Input Tokens):** `{chat_metrics['last_msg_input_tokens']:,}` توكن وتكلفتها: `${chat_metrics['last_msg_input_tokens'] * 0.0000002885:.6f}`
+            * 📤 **توكنز المخرجات + التفكير للرسالة الأخيرة (Output Tokens):** `{chat_metrics['last_msg_output_tokens']:,}` توكن وتكلفتها: `${chat_metrics['last_msg_output_tokens'] * 0.0000031700:.6f}`
+            * 📈 **إجمالي الإنفاق التراكمي للمحادثة النشطة بالكامل:** <span style='color:#10B981; font-weight:bold;'>${chat_metrics['total_cost']:.6f}</span>
+            """, unsafe_allow_html=True)
 
-    else:
-        st.error(f"❌ خطأ أثناء محاولة الاتصال بـ سيرفر المقاييس: {live_data.get('error')}")
-
-    # زر تسجيل الخروج الآمن وتصفير الجلسة الحالية
-    st.markdown("<br><br>", unsafe_allow_html=True)
-    col_logout, _ = st.columns([1, 3])
-    with col_logout:
-        if st.button("🚪 Log Out", type="secondary", use_container_width=True):
-            st.session_state.authenticated = False
-            st.session_state.current_view = "chat"
-            st.rerun()
 # ==============================================================================
 # 🎯 MAIN RUNNER FOR MODULE ENTRIES
 # ==============================================================================
