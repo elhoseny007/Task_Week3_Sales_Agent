@@ -29,7 +29,8 @@ async def save_kayfa_crm_lead(
     city: str = "غير محدد",
     products_of_interest: str = "منصة كيف التعليمية",
     goal: str = "تطوير المهارات التقنية",
-    conversation_summary: str = "استفسار أولي وتجميع بيانات التواصل الأساسية") -> str:
+    conversation_summary: str = "استفسار أولي وتجميع بيانات التواصل الأساسية"
+) -> str:
     """
     Use this tool to save a qualified customer lead into MongoDB CRM Atlas 
     as soon as the user provides their core credentials: Username, Level, and Phone number.
