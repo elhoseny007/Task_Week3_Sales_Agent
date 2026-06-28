@@ -663,43 +663,61 @@ class MCPClient:
             final_clean = full_resp if "</think>" not in full_resp else full_resp.split("</think>")[-1].strip()
             
             # 📊 ====================================================================
-            # 📉 الحسابات المالية الدقيقة للـ Tokens والـ Cost بناءً على لقطة الشاشة للأسعار
+            # 🔮 تخطيط وحفظ التفكير المنفصل لكل رسالة داخل هيكل شات منظم
+            # ====================================================================
+            if "chats_thinking_ledger" not in st.session_state:
+                st.session_state.chats_thinking_ledger = {}
+                
+            active_chat_id = st.session_state.get("current_chat_id", "default_chat")
+            if active_chat_id not in st.session_state.chats_thinking_ledger:
+                st.session_state.chats_thinking_ledger[active_chat_id] = []
+                
+            # التقاط نص التفكير المستخرج
+            extracted_think = ""
+            try:
+                if "<think>" in full_resp and "</think>" in full_resp:
+                    extracted_think = full_resp.split("<think>")[-1].split("</think>")[0].strip()
+                else:
+                    extracted_think = st.session_state.get("agent_thinking", "")
+            except:
+                pass
+
+            # حفظ الرسالة مع التفكير الخاص بها في السجل
+            st.session_state.chats_thinking_ledger[active_chat_id].append({
+                "user_prompt": query,
+                "assistant_response": final_clean,
+                "thinking_process": extracted_think if extracted_think else "لم يتم تسجيل تفكير داخلي لهذه الرسالة (تمت الإجابة مباشرة أو عبر الـ Cache)."
+            })
+            # ====================================================================
+
+            # 📊 ====================================================================
+            # 📉 الحسابات المالية الدقيقة للـ Tokens والـ Cost (ابقاء كود الحسابات كما هو)
             # ====================================================================
             try:
-                # 1. حساب توكنز المخرجات (الرد النهائي + التفكير المستهلك) 
-                # حساب تقريبي موثوق: عدد الكلمات * 1.3 معالجة لتوكنز العربية والانجليزية المختلطة
-                thinking_words = len(st.session_state.agent_thinking.split())
+                thinking_words = len(extracted_think.split())
                 final_words = len(final_clean.split())
-                output_tokens = int((thinking_words + final_words) * 1.3) + 10 # هامش أمان بسيط للوسوم
+                output_tokens = int((thinking_words + final_words) * 1.3) + 10
                 
-                # 2. حساب توكنز المدخلات (البرومبت الحالي + السياق المسترجع من الـ RAG وتاريخ الرسائل)
-                # نأخذ طول نص السيستم برومبت والرسائل السابقة مضروبة في المعامل الرقمي
                 input_words = sum(len(str(msg.get("content", "")).split()) for msg in messages_payload)
                 input_tokens = int(input_words * 1.3)
                 
-                # 3. جلب الأسعار الحقيقية من الـ Screenshot الخاص بك وحساب كلفة الرسالة
                 price_per_input_token = 0.0000002885
                 price_per_output_token = 0.0000031700
                 
-                msg_input_cost = input_tokens * price_per_input_token
-                msg_output_cost = output_tokens * price_per_output_token
-                msg_total_cost = msg_input_cost + msg_output_cost
+                msg_total_cost = (input_tokens * price_per_input_token) + (output_tokens * price_per_output_token)
                 
-                # 4. تحديث مقاييس الرسالة الأخيرة
                 metrics = st.session_state.current_chat_metrics
                 metrics["last_msg_input_tokens"] = input_tokens
                 metrics["last_msg_output_tokens"] = output_tokens
                 metrics["last_msg_tokens"] = input_tokens + output_tokens
                 metrics["last_msg_cost"] = msg_total_cost
                 
-                # 5. التحديث التراكمي لإجمالي المحادثة (Total Chat Tokens & Cost)
                 metrics["total_input_tokens"] += input_tokens
                 metrics["total_output_tokens"] += output_tokens
                 metrics["total_tokens"] += (input_tokens + output_tokens)
                 metrics["total_cost"] += msg_total_cost
-                
-            except Exception as e:
-                print(f"Error calculating token financial costs: {e}")
+            except:
+                pass
             # ====================================================================
 
             return final_clean
