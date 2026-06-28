@@ -805,38 +805,79 @@ def is_arabic_line(text: str) -> bool:
 
 def render_styled_message(role: str, content: str):
     avatar_to_show = r"mortarboard.png" if role == "assistant" else None
-    with st.chat_message(role, avatar=avatar_to_show):
-        lines = content.split("\n")
-        inside_code_block = False
-        current_block = []
+    if role == "assistant":
+        if is_arabic_line(content):
+            st.markdown(
+                f"""
+                <div style="
+                    background: #1E2330; 
+                    border: 1px solid rgba(255, 255, 255, 0.05); 
+                    border-radius: 12px; 
+                    padding: 20px; 
+                    margin-bottom: 15px; 
+                    direction: rtl; 
+                    text-align: right; 
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                ">
+                    <span style="background: #10B981; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 10px; display: inline-block;">الرد الذكي ✨</span>
+                    <div style="color: #FFFFFF !important; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">\n\n{content}\n\n</div>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+        else:
+            st.markdown(
+                f"""
+                <div style="
+                    background: #1E2330; 
+                    border: 1px solid rgba(255, 255, 255, 0.05); 
+                    border-radius: 12px; 
+                    padding: 20px; 
+                    margin-bottom: 15px; 
+                    direction: ltr; 
+                    text-align: left; 
+                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                ">
+                    <span style="background: #3B82F6; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 10px; display: inline-block;">AI Response ✨</span>
+                    <div style="color: #FFFFFF !important; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">\n\n{content}\n\n</div>
+                </div>
+                """, 
+                unsafe_allow_html=True
+            )
+    else:
+        # إبقاء رسائل المستخدم والـ Code Blocks القديمة كما هي لضمان عدم حدوث تشويه
+        with st.chat_message(role, avatar=avatar_to_show):
+            lines = content.split("\n")
+            inside_code_block = False
+            current_block = []
 
-        for line in lines:
-            if line.strip().startswith("```"):
-                inside_code_block = not inside_code_block
-                current_block.append(line)
-                if not inside_code_block:
-                    st.markdown("\n".join(current_block))
-                    current_block = []
-                continue
+            for line in lines:
+                if line.strip().startswith("```"):
+                    inside_code_block = not inside_code_block
+                    current_block.append(line)
+                    if not inside_code_block:
+                        st.markdown("\n".join(current_block))
+                        current_block = []
+                    continue
 
-            if inside_code_block:
-                current_block.append(line)
-                continue
+                if inside_code_block:
+                    current_block.append(line)
+                    continue
 
-            if line.strip() == "":
-                st.markdown("")
-                continue
+                if line.strip() == "":
+                    st.markdown("")
+                    continue
 
-            if is_arabic_line(line):
-                st.markdown(
-                    f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important;">\n\n{line}\n\n</div>', 
-                    unsafe_allow_html=True
-                )
-            else:
-                st.markdown(
-                    f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important;">\n\n{line}\n\n</div>', 
-                    unsafe_allow_html=True
-                )
+                if is_arabic_line(line):
+                    st.markdown(
+                        f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important;">\n\n{line}\n\n</div>', 
+                        unsafe_allow_html=True
+                    )
+                else:
+                    st.markdown(
+                        f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important;">\n\n{line}\n\n</div>', 
+                        unsafe_allow_html=True
+                    )
 
 # ==============================================================================
 # 7. CONDITIONAL VIEW RENDERING & ROUTING
