@@ -259,9 +259,6 @@ import certifi
 from datetime import datetime
 
 def save_crm_ticket(customer_name, phone, email, city, current_level, products_of_interest, goal, conversation_summary, intent_status="hot"):
-    """
-    دالة لحفظ تذكرة العميل المحتمل مباشرة في MongoDB Atlas باللغة العربية
-    """
     try:
         mongo_uri = os.getenv('MONGO_URI', "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/")
         client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
@@ -573,8 +570,11 @@ class MCPClient:
             "Maintain your sales persona strictly. Read the entire conversation history below to ensure context consistency."
         )
         
+        max_history_messages = 6
+        recent_messages = st.session_state.messages[:-1][-max_history_messages:]
+
         messages = [{"role": "system", "content": full_system_prompt}]
-        for msg in st.session_state.messages[:-1]:
+        for msg in recent_messages:
             messages.append({"role": msg["role"], "content": msg["content"]})
         messages.append({"role": "user", "content": query})
 
@@ -584,30 +584,59 @@ class MCPClient:
             input=messages
         )
 
-        # ⚡ دالة داخلية للتعامل مع الـ Streaming وتحديث واجهة سيمبليت كلمة بكلمة
+        # ⚡ دالة داخلية للتعامل مع الـ Streaming وتحديث واجهة سيمبليت كلمة بكلمة مع حجب التفكير الداخلي تماماً
         def stream_response_chunks(messages_payload):
             full_resp = ""
+            display_resp = ""
+            inside_think = False  # مؤشر لمعرفة ما إذا كنا داخل وسم التفكير أم لا
+            
             stream = self.groq_client.chat.completions.create(
                 model=groq_model,
                 messages=messages_payload,
                 temperature=0.2,
-                stream=True  # تفعيل بث الإجابة بالتدريج
+                stream=True  
             )
             for chunk in stream:
                 if chunk.choices[0].delta.content:
-                    full_resp += chunk.choices[0].delta.content
-                    # تحديث الشاشة فوراً مع الحفاظ على الاتجاه العربي والإنكليزي
-                    if is_arabic_line(full_resp):
+                    content_piece = chunk.choices[0].delta.content
+                    full_resp += content_piece
+                    
+                    # الفحص الديناميكي لوسوم التفكير لمنعها من الظهور حية على الشاشة
+                    if "<think>" in full_resp and not inside_think:
+                        inside_think = True
+                    
+                    if "</think>" in full_resp and inside_think:
+                        inside_think = False
+                        # نقوم بقص جزء التفكير بالكامل ونبدأ العرض من بعد إغلاق الوسم
+                        display_resp = full_resp.split("</think>")[-1].strip()
+                        continue
+                    
+                    if inside_think:
+                        # طالما البوت يفكر داخلياً، لا تعرض أي شيء على شاشة المستخدم
+                        continue
+                    else:
+                        # إذا لم نكن داخل التفكير، اعرض النص النهائي مباشرة للمستخدم كلمة بكلمة
+                        display_resp = full_resp if "</think>" not in full_resp else full_resp.split("</think>")[-1].strip()
+                    
+                    # تخطي التحديث إذا كان النص فارغاً لمنع وميض الواجهة
+                    if not display_resp.strip():
+                        continue
+
+                    # تحديث الشاشة فوراً مع الحفاظ على الاتجاه العربي والإنكليزي للرد النهائي الصافي فقط
+                    if is_arabic_line(display_resp):
                         placeholder.markdown(
-                            f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{full_resp}\n\n</div>', 
+                            f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{display_resp}\n\n</div>', 
                             unsafe_allow_html=True
                         )
                     else:
                         placeholder.markdown(
-                            f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{full_resp}\n\n</div>', 
+                            f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{display_resp}\n\n</div>', 
                             unsafe_allow_html=True
                         )
-            return full_resp
+            
+            # التأكد من إرجاع النص النهائي النظيف لحفظه في الـ Session State بدون وسوم التفكير
+            final_clean = full_resp if "</think>" not in full_resp else full_resp.split("</think>")[-1].strip()
+            return final_clean
 
         if not self.sessions:
             final_content = stream_response_chunks(messages)
@@ -757,13 +786,13 @@ if st.session_state.current_view == "chat":
     with input_col2:
         prompt = st.chat_input("Hi, I'm Kayfa, how can I help you? 😊")
 
-    if prompt:
+    if prompt:س
         st.session_state.messages.append({"role": "user", "content": prompt})
         render_styled_message("user", prompt)
 
     if st.session_state.messages and st.session_state.messages[-1]["role"] == "user":
         with st.chat_message("assistant", avatar=r"mortarboard.png"):
-            placeholder = st.empty()  # 1. إنشاء الحاوية المخصصة للبث المباشر المحدث
+            placeholder = st.empty()  
             
             async def run_mcp_pipeline():
                 client = MCPClient()
@@ -781,7 +810,6 @@ if st.session_state.current_view == "chat":
                             st.sidebar.warning("⚠️ سيرفر HubSpot المساعد غير متصل حالياً، الشات يعمل عبر الكتالوج الرئيسي.")
             
                     last_user_query = st.session_state.messages[-1]["content"]
-                    # 2. نمرر الـ placeholder بداخل الـ process_query ليحدث النص أولاً بأول
                     res = await client.process_query(last_user_query, placeholder)
                     return res
                 except Exception as e:
@@ -821,7 +849,6 @@ if st.session_state.current_view == "chat":
             except Exception:
                 pass
 
-            # 3. حفظ الرد النهائي بالكامل بعد انتهاء البث التفاعلي
             st.session_state.messages.append({"role": "assistant", "content": clean_response})
             st.rerun()
 
