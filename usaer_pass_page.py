@@ -247,25 +247,25 @@ def render_dashboard_page():
         live_data = fetch_langfuse_metrics(pub_key, sec_key)
 
     if live_data["status"] == "success":
-        # قراءة المقاييس الحية
+        # قراءة المقاييس الحية المسترجعة من Langfuse كـ Global Metrics
         calls_count = live_data['calls_count']
         total_tokens = live_data['total_tokens']
         total_users = len(live_data['unique_users'])
         
-        # 🎯 حساب دقة التكلفة (Cost Accuracy): جمع تكلفة الـ LLM مع تكلفة نموذج الـ Embeddings (0.13$ لكل مليون توكن للـ text-embedding)
         llm_cost = live_data['total_cost']
         embeddings_cost = (total_tokens * 0.13) / 1000000
         total_combined_cost = llm_cost + embeddings_cost
 
-        # عرض الكروت الرقمية العلوية
+        # عرض الكروت الرقمية العلوية للنظام بشكل عام
         render_kpi_cards(total_combined_cost, calls_count, total_users, total_tokens)
         st.markdown("---")
 
-        # بناء التبويبات المطلوبة لمناقشة مشروع التخرج
-        tab_crm, tab_trace, tab_stats, tab_hosting = st.tabs([
+        # 🎯 بناء التبويبات المطلوبة مع إضافة التبويب المخصص للتفكير المستقل بناءً على طلبك
+        tab_crm, tab_trace, tab_thinking, tab_stats, tab_hosting = st.tabs([
             "📋 CRM Tickets (MongoDB)", 
             "🧠 Response Trace Monitor", 
-            "📊 Accurate Cost & Optimization",
+            "🔮 Live Thinking Process",         # التبويب الجديد للتفكير بصوت عالٍ
+            "📊 Accurate Cost & Optimization",  # التبويب المعدل لحساب كلفة الرسالة وإجمالي الشات
             "🖥️ Infrastructure & VPS Status"
         ])
 
@@ -285,7 +285,6 @@ def render_dashboard_page():
                     c_info = tk.get("customer_info", {})
                     edu = tk.get("educational_profile", {})
                     meta = tk.get("conversation_metadata", {})
-                    signals = tk.get("sales_signals", {})
                     
                     st.markdown(f"""
                     <div class="ticket-card">
@@ -306,7 +305,7 @@ def render_dashboard_page():
                     """, unsafe_allow_html=True)
 
         # ==============================================================================
-        # TAB 2: RESPONSE TRACE MONITOR (مكشف التخريف والـ Grounding وعرض رحلة التفكير)
+        # TAB 2: RESPONSE TRACE MONITOR
         # ==============================================================================
         with tab_trace:
             st.subheader("🧠 شاشة مراقبة التفكير وتتبع السلوك التفصيلي")
@@ -335,17 +334,69 @@ def render_dashboard_page():
                 st.warning(f"جاري مزامنة وسحب كتل التتبع الحية من ليدجر الجلسة الحالية... ({e})")
 
         # ==============================================================================
-        # TAB 3: COST ACCURACY & OPTIMIZATION REPORT (تقرير دقة التكلفة والتحسين الهيكلي)
+        # 🎯 TAB 3: LIVE THINKING PROCESS (عرض التفكير المقتطع من الشات الرئيسي)
+        # ==============================================================================
+        with tab_thinking:
+            st.subheader("🔮 شاشة معالجة الأفكار الحية للموديل (Thinking Out Loud)")
+            st.caption("هنا يعرض الوكيل الذكي خطوات تفكيره الداخلي، وتحليله لنية المستخدم، واستراتيجية الرد قبل إرسال الجواب الصافي إلى الشات.")
+            
+            # جلب نص التفكير المحفوظ في الجلسة
+            current_thinking = st.session_state.get("agent_thinking", "")
+            
+            if current_thinking:
+                st.markdown(f"""
+                <div style="background: #11151F; border-right: 4px solid #FBBF24; padding: 20px; border-radius: 8px; margin-bottom: 12px;">
+                    <p style="color: #FBBF24; font-weight: bold; margin-top: 0;">⚡ خطة التفكير المنطقية النشطة حالياً للموديل (Internal Chain-of-Thought):</p>
+                    <div style="color: #E5E7EB; white-space: pre-wrap; font-family: monospace; font-size: 14px; direction: ltr; text-align: left;">
+{current_thinking}
+                    </div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.info("لا يوجد تفكير نشط حالياً. بمجرد إرسال المستخدم لرسالة جديدة، سيظهر تفكير الوكيل هنا حياً دون التأثير على نظافة الشات الرئيسي.")
+
+        # ==============================================================================
+        # 🎯 TAB 4: ACCURATE COST & OPTIMIZATION REPORT (حساب كلفة الرسالة الحالية وإجمالي الشات)
         # ==============================================================================
         with tab_stats:
-            st.subheader("📊 تحليل دقة التكلفة المالية وتقارير التحسين (Optimization Report)")
+            st.subheader("📊 تحليل دقة التكلفة المالية للمحادثة النشطة وحساب الـ Tokens")
+            st.caption("يتم هنا رصد استهلاك الـ Tokens والتكلفة المالية لآخر رسالة تم معالجتها بدقة ومقارنتها بالإجمالي التراكمي للمحادثة المفتوحة حالياً.")
+            
+            # جلب المقاييس الحية للمحادثة النشطة من الـ Session State
+            chat_metrics = st.session_state.get("current_chat_metrics", {
+                "total_tokens": 0,
+                "total_cost": 0.0,
+                "last_msg_tokens": 0,
+                "last_msg_cost": 0.0,
+                "last_msg_input_tokens": 0,
+                "last_msg_output_tokens": 0,
+                "total_input_tokens": 0,
+                "total_output_tokens": 0
+            })
+            
+            # 💳 عرض كروت رقمية حية للمقاييس المالية المحددة للشات والرسالة الحالية
+            st.markdown("#### ⚡ مؤشرات الاستهلاك والإنفاق اللحظية")
+            met_col1, met_col2, met_col3, met_col4 = st.columns(4)
+            with met_col1:
+                st.metric(label="💬 Last Message Tokens", value=f"{chat_metrics['last_msg_tokens']:,}")
+            with met_col2:
+                st.metric(label="💵 Last Message Cost", value=f"${chat_metrics['last_msg_cost']:.6f}")
+            with met_col3:
+                st.metric(label="🔄 Total Chat Tokens", value=f"{chat_metrics['total_tokens']:,}")
+            with met_col4:
+                st.metric(label="💰 Total Chat Cost", value=f"${chat_metrics['total_cost']:.6f}")
+                
+            st.markdown("---")
             
             col_a, col_b = st.columns(2)
             with col_a:
-                st.markdown("#### 💵 تفصيل المصاريف والمزودين بدقة")
-                st.write(f"🔹 **تكلفة استدعاء الـ LLM (Groq Engine):** `${llm_cost:.6f}`")
-                st.write(f"🔹 **تكلفة معالجة الـ Embeddings (`all-MiniLM-L6-v2`):** `${embeddings_cost:.6f}`")
-                st.markdown(f"📈 **إجمالي الفاتورة التشغيلية المركبة:** `${total_combined_cost:.6f}`")
+                st.markdown("#### 💵 تفصيل فواتير الـ Tokens الحالية (System Chat Ledger)")
+                st.markdown(f"""
+                * 📥 **توكنز المدخلات للرسالة الأخيرة (Input Tokens):** `{chat_metrics['last_msg_input_tokens']:,}` توكن وتكلفتها: `${chat_metrics['last_msg_input_tokens'] * 0.0000002885:.6f}`
+                * 📤 **توكنز المخرجات + التفكير للرسالة الأخيرة (Output Tokens):** `{chat_metrics['last_msg_output_tokens']:,}` توكن وتكلفتها: `${chat_metrics['last_msg_output_tokens'] * 0.0000031700:.6f}`
+                * 📈 **إجمالي الإنفاق التراكمي للمحادثة النشطة بالكامل:** <span style='color:#10B981; font-weight:bold;'>${chat_metrics['total_cost']:.6f}</span>
+                """, unsafe_allow_html=True)
+                st.caption("📌 تم حساب هذه الفواتير بالاعتماد على أسعار Qwen المعتمدة على حسابك: Input: $0.0000002885/token | Output: $0.0000031700/token.")
             
             with col_b:
                 st.markdown("#### ⚡ إثبات التحسين ومقارنة التكلفة (Close the Loop)")
@@ -357,7 +408,7 @@ def render_dashboard_page():
                 """)
 
         # ==============================================================================
-        # TAB 4: INFRASTRUCTURE & VPS STATUS
+        # TAB 5: INFRASTRUCTURE & VPS STATUS
         # ==============================================================================
         with tab_hosting:
             st.subheader("🖥️ Specifications & Hosting Architecture")
@@ -380,7 +431,6 @@ def render_dashboard_page():
             st.session_state.authenticated = False
             st.session_state.current_view = "chat"
             st.rerun()
-
 # ==============================================================================
 # 🎯 MAIN RUNNER FOR MODULE ENTRIES
 # ==============================================================================
