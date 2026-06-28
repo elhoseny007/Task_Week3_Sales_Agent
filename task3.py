@@ -588,7 +588,6 @@ class MCPClient:
         def stream_response_chunks(messages_payload):
             full_resp = ""
             display_resp = ""
-            inside_think = False  # مؤشر لمعرفة ما إذا كنا داخل وسم التفكير أم لا
             
             # تهيئة متغير لتجميع نص التفكير وعرضه في لوحة التحكم لاحقاً
             if "agent_thinking" not in st.session_state:
@@ -597,14 +596,8 @@ class MCPClient:
             # 📊 تهيئة العدادات الرقمية والمالية للشات الحالي والرسالة الحالية داخل الـ Session State
             if "current_chat_metrics" not in st.session_state:
                 st.session_state.current_chat_metrics = {
-                    "total_tokens": 0,
-                    "total_cost": 0.0,
-                    "last_msg_tokens": 0,
-                    "last_msg_cost": 0.0,
-                    "last_msg_input_tokens": 0,
-                    "last_msg_output_tokens": 0,
-                    "total_input_tokens": 0,
-                    "total_output_tokens": 0
+                    "total_tokens": 0, "total_cost": 0.0, "last_msg_tokens": 0, "last_msg_cost": 0.0,
+                    "last_msg_input_tokens": 0, "last_msg_output_tokens": 0, "total_input_tokens": 0, "total_output_tokens": 0
                 }
 
             stream = self.groq_client.chat.completions.create(
@@ -613,54 +606,119 @@ class MCPClient:
                 temperature=0.2,
                 stream=True  
             )
+            
             for chunk in stream:
                 if chunk.choices[0].delta.content:
                     content_piece = chunk.choices[0].delta.content
                     full_resp += content_piece
                     
-                    # الفحص الديناميكي لوسوم التفكير لمنعها من الظهور حية على الشاشة
-                    if "<think>" in full_resp and not inside_think:
-                        inside_think = True
-                    
-                    if "</think>" in full_resp and inside_think:
-                        inside_think = False
-                        
-                        # 🎯 استخراج نص التفكير وتخزينه في الجلسة لعرضه بصفحة الـ Tab المنفصل
-                        try:
-                            thinking_extracted = full_resp.split("<think>")[-1].split("</think>")[0].strip()
-                            st.session_state.agent_thinking = thinking_extracted
-                        except:
-                            pass
-                            
-                        # نقوم بقص جزء التفكير بالكامل ونبدأ العرض من بعد إغلاق الوسم
-                        display_resp = full_resp.split("</think>")[-1].strip()
-                        continue
-                    
-                    if inside_think:
-                        # طالما البوت يفكر داخلياً، لا تعرض أي شيء على شاشة المستخدم
-                        continue
+                    # 🎯 فصل التفكير عن الرد النهائي بذكاء وأمان سواء وجد التفكير أم لا
+                    if "<think>" in full_resp:
+                        if "</think>" in full_resp:
+                            # الموديل أنهى التفكير، نأخذ ما بعد الـ </think> للعرض
+                            parts = full_resp.split("</think>")
+                            display_resp = parts[-1].strip()
+                            # حفظ التفكير في الـ session_state
+                            try:
+                                st.session_state.agent_thinking = full_resp.split("<think>")[-1].split("</think>")[0].strip()
+                            except:
+                                pass
+                        else:
+                            # الموديل ما زال يفكر بالداخل، لا تعرض شيء للمستخدم حالياً
+                            display_resp = ""
                     else:
-                        # إذا لم نكن داخل التفكير، اعرض النص النهائي مباشرة للمستخدم كلمة بكلمة
-                        display_resp = full_resp if "</think>" not in full_resp else full_resp.split("</think>")[-1].strip()
+                        # الموديل لم يستخدم وسوم تفكير إطلاقاً، اعرض النص بالكامل مباشرة
+                        display_resp = full_resp.strip()
                     
                     # تخطي التحديث إذا كان النص فارغاً لمنع وميض الواجهة
-                    if not display_resp.strip():
+                    if not display_resp:
                         continue
 
-                    # تحديث الشاشة فوراً مع الحفاظ على الاتجاه العربي والإنكليزي للرد النهائي الصافي فقط
+                    # 🎯 تحديث الشاشة فوراً بداخل الـ Cover الاحترافي الموحد
                     if is_arabic_line(display_resp):
                         placeholder.markdown(
-                            f'<div style="direction: rtl; text-align: right; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{display_resp}\n\n</div>', 
+                            f"""
+                            <div style="
+                                background: #1E2330; 
+                                border: 1px solid rgba(255, 255, 255, 0.05); 
+                                border-radius: 12px; 
+                                padding: 20px; 
+                                margin-bottom: 15px; 
+                                direction: rtl; 
+                                text-align: right; 
+                                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                            ">
+                                <span style="background: #10B981; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 10px; display: inline-block;">الرد الذكي ✨</span>
+                                <div style="color: #FFFFFF !important; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">{display_resp}</div>
+                            </div>
+                            """, 
                             unsafe_allow_html=True
                         )
                     else:
                         placeholder.markdown(
-                            f'<div style="direction: ltr; text-align: left; color: #FFFFFF !important; white-space: pre-wrap;">\n\n{display_resp}\n\n</div>', 
+                            f"""
+                            <div style="
+                                background: #1E2330; 
+                                border: 1px solid rgba(255, 255, 255, 0.05); 
+                                border-radius: 12px; 
+                                padding: 20px; 
+                                margin-bottom: 15px; 
+                                direction: ltr; 
+                                text-align: left; 
+                                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                            ">
+                                <span style="background: #3B82F6; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 10px; display: inline-block;">AI Response ✨</span>
+                                <div style="color: #FFFFFF !important; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">{display_resp}</div>
+                            </div>
+                            """, 
                             unsafe_allow_html=True
                         )
             
-            # التأكد من إرجاع النص النهائي النظيف لحفظه في الـ Session State بدون وسوم التفكير
+            # حساب الإخراج النهائي النظيف تماماً
             final_clean = full_resp if "</think>" not in full_resp else full_resp.split("</think>")[-1].strip()
+            
+            # 🔮 حفظ التفكير والرسالة داخل قاموس الشات الشجري المنظم للـ Live Tab
+            if "chats_thinking_ledger" not in st.session_state:
+                st.session_state.chats_thinking_ledger = {}
+                
+            active_chat_id = st.session_state.get("current_chat_id", "default_chat")
+            if active_chat_id not in st.session_state.chats_thinking_ledger:
+                st.session_state.chats_thinking_ledger[active_chat_id] = []
+                
+            extracted_think = st.session_state.get("agent_thinking", "").strip()
+
+            st.session_state.chats_thinking_ledger[active_chat_id].append({
+                "user_prompt": query,
+                "assistant_response": final_clean,
+                "thinking_process": extracted_think if extracted_think else "لم يتم تسجيل تفكير داخلي لهذه الرسالة (تمت الإجابة مباشرة أو عبر الـ Cache)."
+            })
+
+            # 📉 الحسابات المالية الدقيقة للـ Tokens والـ Cost
+            try:
+                thinking_words = len(extracted_think.split())
+                final_words = len(final_clean.split())
+                output_tokens = int((thinking_words + final_words) * 1.3) + 10
+                input_words = sum(len(str(msg.get("content", "")).split()) for msg in messages_payload)
+                input_tokens = int(input_words * 1.3)
+                
+                price_per_input_token = 0.0000002885
+                price_per_output_token = 0.0000031700
+                msg_total_cost = (input_tokens * price_per_input_token) + (output_tokens * price_per_output_token)
+                
+                metrics = st.session_state.current_chat_metrics
+                metrics["last_msg_input_tokens"] = input_tokens
+                metrics["last_msg_output_tokens"] = output_tokens
+                metrics["last_msg_tokens"] = input_tokens + output_tokens
+                metrics["last_msg_cost"] = msg_total_cost
+                
+                metrics["total_input_tokens"] += input_tokens
+                metrics["total_output_tokens"] += output_tokens
+                metrics["total_tokens"] += (input_tokens + output_tokens)
+                metrics["total_cost"] += msg_total_cost
+            except:
+                pass
+
+            return final_clean
             
             # 📊 ====================================================================
             # 🔮 تخطيط وحفظ التفكير المنفصل لكل رسالة داخل هيكل شات منظم
