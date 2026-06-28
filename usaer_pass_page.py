@@ -337,23 +337,74 @@ def render_dashboard_page():
         # 🎯 TAB 3: LIVE THINKING PROCESS (عرض التفكير المقتطع من الشات الرئيسي)
         # ==============================================================================
         with tab_thinking:
-            st.subheader("🔮 شاشة معالجة الأفكار الحية للموديل (Thinking Out Loud)")
-            st.caption("هنا يعرض الوكيل الذكي خطوات تفكيره الداخلي، وتحليله لنية المستخدم، واستراتيجية الرد قبل إرسال الجواب الصافي إلى الشات.")
+            st.subheader("🔮 أرشيف معالجة الأفكار الحية والشجرية (Hierarchical Chat Thinking)")
+            st.caption("اختر المحادثة المطلوبة من القائمة، ثم افتح الرسالة المستهدفة لاستعراض رحلة تفكير الوكيل الذكي الخاص بها.")
             
-            # جلب نص التفكير المحفوظ في الجلسة
-            current_thinking = st.session_state.get("agent_thinking", "")
+            # جلب سجل التفكير وسجل المحادثات من الجلسة
+            ledger = st.session_state.get("chats_thinking_ledger", {})
+            all_chats_history = st.session_state.get("all_chats", {})
             
-            if current_thinking:
-                st.markdown(f"""
-                <div style="background: #11151F; border-right: 4px solid #FBBF24; padding: 20px; border-radius: 8px; margin-bottom: 12px;">
-                    <p style="color: #FBBF24; font-weight: bold; margin-top: 0;">⚡ خطة التفكير المنطقية النشطة حالياً للموديل (Internal Chain-of-Thought):</p>
-                    <div style="color: #E5E7EB; white-space: pre-wrap; font-family: monospace; font-size: 14px; direction: ltr; text-align: left;">
-{current_thinking}
-                    </div>
-                </div>
-                """, unsafe_allow_html=True)
+            if not ledger:
+                st.info("لا توجد سجلات تفكير محفوظة في جلسة العمل النشطة حتى الآن. يرجى إرسال رسائل في الشات أولاً.")
             else:
-                st.info("لا يوجد تفكير نشط حالياً. بمجرد إرسال المستخدم لرسالة جديدة، سيظهر تفكير الوكيل هنا حياً دون التأثير على نظافة الشات الرئيسي.")
+                # تجهيز قائمة المحادثات المتاحة للاختيار
+                chat_options = {}
+                for chat_id, records in ledger.items():
+                    chat_messages = all_chats_history.get(chat_id, [])
+                    user_prompts = [m["content"] for m in chat_messages if m["role"] == "user"]
+                    
+                    if user_prompts:
+                        first_prompt = user_prompts[0]
+                        chat_title = first_prompt[:40] + "..." if len(first_prompt) > 40 else first_prompt
+                    else:
+                        chat_title = f"محادثة معرفة بـ ({chat_id[:5]})"
+                    
+                    chat_options[chat_id] = f"📁 {chat_title} ({len(records)} رسائل)"
+                
+                # إنشاء قائمة منسدلة أنيقة لاختيار الشات لمنع التداخل في الـ Expanders
+                selected_chat_id = st.selectbox(
+                    "🗂️ اختر المحادثة النشطة لاستعراض تفكيرها الداخلي:",
+                    options=list(chat_options.keys()),
+                    format_func=lambda x: chat_options[x]
+                )
+                
+                st.markdown("---")
+                
+                # عرض الرسائل الخاصة بالشات المختار فقط
+                if selected_chat_id:
+                    selected_records = ledger[selected_chat_id]
+                    st.markdown(f"<p style='color: #10B981; font-weight: bold;'>📝 رسائل المحادثة المختارة:</p>", unsafe_allow_html=True)
+                    
+                    for idx, record in enumerate(selected_records):
+                        msg_title = record["user_prompt"]
+                        short_msg_title = msg_title[:70] + "..." if len(msg_title) > 70 else msg_title
+                        
+                        # عنصر expander رئيسي ومستقل لكل رسالة (بدون أي تداخل)
+                        with st.expander(f"💬 {idx+1}. السؤال: {short_msg_title}"):
+                            st.markdown(f"""
+                            <div style="background: rgba(255,255,255,0.02); padding: 12px; border-radius: 6px; margin-bottom: 10px; border-left: 3px solid #10B981; direction: rtl; text-align: right;">
+                                <span style="color: #10B981; font-weight: bold; font-size: 12px;">السؤال الكامل للمستخدم:</span>
+                                <p style="color: #FFFFFF; margin: 4px 0; font-size: 14px;">{record['user_prompt']}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # عرض كتل التفكير الداخلي الفعلي للرسالة
+                            st.markdown(f"""
+                            <div style="background: #11151F; border-right: 4px solid #FBBF24; padding: 15px; border-radius: 6px; margin-bottom: 10px; direction: ltr; text-align: left;">
+                                <span style="color: #FBBF24; font-weight: bold; font-size: 12px; direction: rtl; text-align: right; display: block;">⚙️ خطة تفكير النموذج (Internal Reasoning):</span>
+                                <div style="color: #E5E7EB; white-space: pre-wrap; font-family: monospace; font-size: 13px; margin-top: 8px;">
+{record['thinking_process']}
+                                </div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                            # عرض الرد النهائي
+                            st.markdown(f"""
+                            <div style="background: rgba(16, 185, 129, 0.03); padding: 12px; border-radius: 6px; border-right: 3px solid #34D399; direction: rtl; text-align: right;">
+                                <span style="color: #34D399; font-weight: bold; font-size: 12px;">الرد النهائي الصافي المرسل للمستخدم:</span>
+                                <p style="color: #FFFFFF; margin: 4px 0; font-size: 14px;">{record['assistant_response']}</p>
+                            </div>
+                            """, unsafe_allow_html=True)
 
         # ==============================================================================
         # 🎯 TAB 4: ACCURATE COST & OPTIMIZATION REPORT (حساب كلفة الرسالة الحالية وإجمالي الشات)
