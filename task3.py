@@ -245,7 +245,7 @@ st.markdown("""
             <span class="highlight">Intelligent Enrollment Assistant</span>
         </h1>
         <p class="subtitle">
-            An advanced sales agent grounded in Kayfa's official catalog. Converses naturally in Arabic and English, handles objections, and logs qualified leads to MongoDB CRM.
+            Project3: Kayfa internship  
         </p>
     </div>
 </div>
