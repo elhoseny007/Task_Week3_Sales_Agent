@@ -528,7 +528,7 @@ class MCPClient:
 
         rag_context = ""
         try:
-            kb_retriever = kb_index.as_retriever(similarity_top_k=2)
+            kb_retriever = kb_index.as_retriever(similarity_top_k=1)
             kb_results = kb_retriever.retrieve(query)
             if kb_results:
                 rag_context = "Relevant Knowledge Base Context from Kayfa Catalog:\n"
@@ -786,7 +786,7 @@ if st.session_state.current_view == "chat":
     with input_col2:
         prompt = st.chat_input("Hi, I'm Kayfa, how can I help you? 😊")
 
-    if prompt:س
+    if prompt:
         st.session_state.messages.append({"role": "user", "content": prompt})
         render_styled_message("user", prompt)
 
