@@ -160,16 +160,81 @@ def fetch_langfuse_metrics(pub_key: str, sec_key: str) -> Dict:
 # ==============================================================================
 def render_kpi_cards(total_combined_cost: float, calls_count: int, total_users: int, total_tokens: int):
     """عرض كروت المؤشرات الرئيسية بأعلى لوحة التحكم بأسلوب بريميوم وثابت"""
-    col1, col2, col3, col4 = st.columns(4)
-    with col1:
-        st.metric(label="💰 Total Combined Cost (LLM+Embed)", value=f"${total_combined_cost:.6f}")
-    with col2:
-        st.metric(label="📞 Total API Calls", value=f"{calls_count:,}")
-    with col3:
-        st.metric(label="🔄 Total Tokens Consumed", value=f"{total_tokens:,}")
-    with col4:
-        st.metric(label="👥 Active Tracked Users", value=f"{total_users}")
-
+    
+    # تنسيق الـ CSS لجعل الكروت تبدو احترافية ومتجاوبة
+    kpi_css = """
+    <style>
+    .kpi-container {
+        display: flex;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .kpi-card {
+        flex: 1;
+        background: #1E293B; /* لون خلفية داكن وراقي */
+        padding: 1.5rem;
+        border-radius: 12px;
+        box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        border: 1px solid #334155;
+        transition: transform 0.2s;
+    }
+    .kpi-card:hover {
+        transform: translateY(-2px);
+    }
+    .kpi-icon {
+        font-size: 1.5rem;
+        margin-bottom: 0.5rem;
+        display: block;
+    }
+    .kpi-value {
+        font-size: 1.6rem;
+        font-weight: 700;
+        color: #F8FAFC;
+        margin: 0.2rem 0;
+    }
+    .kpi-label {
+        font-size: 0.85rem;
+        color: #94A3B8;
+        font-weight: 500;
+    }
+    /* تحسين التوافق مع الشاشات الصغيرة */
+    @media (max-width: 768px) {
+        .kpi-container {
+            flex-direction: column;
+        }
+    }
+    </style>
+    """
+    
+    # دمج القيم الفعلية وتنسيق الأرقام داخل الـ HTML
+    kpi_html = f"""
+    {kpi_css}
+    <div class="kpi-container">
+        <div class="kpi-card">
+            <span class="kpi-icon">💰</span>
+            <div class="kpi-value">${total_combined_cost:.6f}</div>
+            <div class="kpi-label">Total Combined Cost (LLM+Embed)</div>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-icon">📞</span>
+            <div class="kpi-value">{calls_count:,}</div>
+            <div class="kpi-label">Total API Calls</div>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-icon">🔄</span>
+            <div class="kpi-value">{total_tokens:,}</div>
+            <div class="kpi-label">Total Tokens Consumed</div>
+        </div>
+        <div class="kpi-card">
+            <span class="kpi-icon">👥</span>
+            <div class="kpi-value">{total_users:,}</div>
+            <div class="kpi-label">Active Tracked Users</div>
+        </div>
+    </div>
+    """
+    
+    # عرض الكروت في Streamlit
+    st.markdown(kpi_html, unsafe_allow_html=True)
 # ==============================================================================
 # 🔐 RESTRICTED LOGIN PORTAL
 # ==============================================================================
