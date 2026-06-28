@@ -590,6 +590,23 @@ class MCPClient:
             display_resp = ""
             inside_think = False  # مؤشر لمعرفة ما إذا كنا داخل وسم التفكير أم لا
             
+            # تهيئة متغير لتجميع نص التفكير وعرضه في لوحة التحكم لاحقاً
+            if "agent_thinking" not in st.session_state:
+                st.session_state.agent_thinking = ""
+                
+            # 📊 تهيئة العدادات الرقمية والمالية للشات الحالي والرسالة الحالية داخل الـ Session State
+            if "current_chat_metrics" not in st.session_state:
+                st.session_state.current_chat_metrics = {
+                    "total_tokens": 0,
+                    "total_cost": 0.0,
+                    "last_msg_tokens": 0,
+                    "last_msg_cost": 0.0,
+                    "last_msg_input_tokens": 0,
+                    "last_msg_output_tokens": 0,
+                    "total_input_tokens": 0,
+                    "total_output_tokens": 0
+                }
+
             stream = self.groq_client.chat.completions.create(
                 model=groq_model,
                 messages=messages_payload,
@@ -607,6 +624,14 @@ class MCPClient:
                     
                     if "</think>" in full_resp and inside_think:
                         inside_think = False
+                        
+                        # 🎯 استخراج نص التفكير وتخزينه في الجلسة لعرضه بصفحة الـ Tab المنفصل
+                        try:
+                            thinking_extracted = full_resp.split("<think>")[-1].split("</think>")[0].strip()
+                            st.session_state.agent_thinking = thinking_extracted
+                        except:
+                            pass
+                            
                         # نقوم بقص جزء التفكير بالكامل ونبدأ العرض من بعد إغلاق الوسم
                         display_resp = full_resp.split("</think>")[-1].strip()
                         continue
@@ -636,6 +661,47 @@ class MCPClient:
             
             # التأكد من إرجاع النص النهائي النظيف لحفظه في الـ Session State بدون وسوم التفكير
             final_clean = full_resp if "</think>" not in full_resp else full_resp.split("</think>")[-1].strip()
+            
+            # 📊 ====================================================================
+            # 📉 الحسابات المالية الدقيقة للـ Tokens والـ Cost بناءً على لقطة الشاشة للأسعار
+            # ====================================================================
+            try:
+                # 1. حساب توكنز المخرجات (الرد النهائي + التفكير المستهلك) 
+                # حساب تقريبي موثوق: عدد الكلمات * 1.3 معالجة لتوكنز العربية والانجليزية المختلطة
+                thinking_words = len(st.session_state.agent_thinking.split())
+                final_words = len(final_clean.split())
+                output_tokens = int((thinking_words + final_words) * 1.3) + 10 # هامش أمان بسيط للوسوم
+                
+                # 2. حساب توكنز المدخلات (البرومبت الحالي + السياق المسترجع من الـ RAG وتاريخ الرسائل)
+                # نأخذ طول نص السيستم برومبت والرسائل السابقة مضروبة في المعامل الرقمي
+                input_words = sum(len(str(msg.get("content", "")).split()) for msg in messages_payload)
+                input_tokens = int(input_words * 1.3)
+                
+                # 3. جلب الأسعار الحقيقية من الـ Screenshot الخاص بك وحساب كلفة الرسالة
+                price_per_input_token = 0.0000002885
+                price_per_output_token = 0.0000031700
+                
+                msg_input_cost = input_tokens * price_per_input_token
+                msg_output_cost = output_tokens * price_per_output_token
+                msg_total_cost = msg_input_cost + msg_output_cost
+                
+                # 4. تحديث مقاييس الرسالة الأخيرة
+                metrics = st.session_state.current_chat_metrics
+                metrics["last_msg_input_tokens"] = input_tokens
+                metrics["last_msg_output_tokens"] = output_tokens
+                metrics["last_msg_tokens"] = input_tokens + output_tokens
+                metrics["last_msg_cost"] = msg_total_cost
+                
+                # 5. التحديث التراكمي لإجمالي المحادثة (Total Chat Tokens & Cost)
+                metrics["total_input_tokens"] += input_tokens
+                metrics["total_output_tokens"] += output_tokens
+                metrics["total_tokens"] += (input_tokens + output_tokens)
+                metrics["total_cost"] += msg_total_cost
+                
+            except Exception as e:
+                print(f"Error calculating token financial costs: {e}")
+            # ====================================================================
+
             return final_clean
 
         if not self.sessions:
