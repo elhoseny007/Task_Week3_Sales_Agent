@@ -51,12 +51,15 @@ def initialize_session_state():
 def get_mongo_tickets():
     """الاتصال الآمن بـ MongoDB Atlas وجلب تذاكر المبيعات مرتبة من الأحدث للأقدم"""
     try:
-        # تم إزالة الأقواس التالفة وضبط الرابط الصحيح لـ Cluster0 الخاص بك
-        mongo_uri = "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/?retryWrites=true&w=majority"
+        # استخدام الرابط السليم والمجرب بنجاح
+        mongo_uri = "mongodb+srv://kayfa_admin:KayfaSecure2026@cluster0.x5jk1ox.mongodb.net/"
         client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
+        
         db = client["kayfa_crm"]
         tickets_collection = db["crm_tickets"]
-        return list(tickets_collection.find().sort("conversation_metadata.timestamp", -1))
+        
+        tickets = list(tickets_collection.find().sort("conversation_metadata.timestamp", -1))
+        return tickets
     except Exception as e:
         logger.error(f"فشل الاتصال بـ MongoDB: {e}")
         return []
