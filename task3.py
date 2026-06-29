@@ -258,9 +258,20 @@ from pymongo import MongoClient
 import certifi
 from datetime import datetime
 
-def save_crm_ticket(customer_name, phone, email, city, current_level, products_of_interest, goal, conversation_summary, intent_status="hot"):
+
+def save_crm_ticket(
+    customer_name, 
+    phone, 
+    current_level, 
+    email="لم يذكر بعد", 
+    city="غير محدد", 
+    products_of_interest="منصة كيف التعليمية", 
+    goal="تطوير المهارات التقنية", 
+    conversation_summary="استفسار أولي وتجميع بيانات التواصل الأساسية", 
+    intent_status="hot"
+):
     try:
-        mongo_uri = os.getenv('MONGO_URI', "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/")
+        mongo_uri = os.getenv('MONGO_URI',"mongodb+srv://kayfa_admin:KayfaSecure2026@cluster0.x5jk1ox.mongodb.net/")
         client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
         
         db = client["kayfa_crm"]
@@ -281,8 +292,8 @@ def save_crm_ticket(customer_name, phone, email, city, current_level, products_o
             },
             "sales_signals": {
                 "lead_temperature": intent_status,       
-                "buying_signals": "استفسر عن طرق الدفع والتسجيل",
-                "objections_handled": "تم توضيح خيارات التقسيط وقيمة الشهادة"
+                "buying_signals": "استفسر عن طرق الدفع والتسجيل وأدخل بياناته الأساسية",
+                "objections_handled": "تم توضيح الخيارات المبدئية وحفظ الليد بنجاح"
             },
             "conversation_metadata": {
                 "summary_ar": conversation_summary,      
