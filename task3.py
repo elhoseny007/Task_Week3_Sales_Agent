@@ -614,7 +614,7 @@ class MCPClient:
             stream = self.groq_client.chat.completions.create(
                 model=groq_model,
                 messages=messages_payload,
-                temperature=0.2,
+                temperature=0.1,
                 stream=True  
             )
             
