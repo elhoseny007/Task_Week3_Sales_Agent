@@ -617,74 +617,76 @@ class MCPClient:
                 temperature=0.3,
                 stream=True  
             )
-            
-            for chunk in stream:
-                if chunk.choices[0].delta.content:
-                    content_piece = chunk.choices[0].delta.content
-                    full_resp += content_piece
+            try: 
+                for chunk in stream:
+                    if chunk.choices[0].delta.content:
+                        content_piece = chunk.choices[0].delta.content
+                        full_resp += content_piece
                     
                     # 🎯 فصل التفكير عن الرد النهائي بذكاء وأمان سواء وجد التفكير أم لا
-                    if "<think>" in full_resp:
-                        if "</think>" in full_resp:
-                            # الموديل أنهى التفكير، نأخذ ما بعد الـ </think> للعرض
-                            parts = full_resp.split("</think>")
-                            display_resp = parts[-1].strip()
+                        if "<think>" in full_resp:
+                            if "</think>" in full_resp:
+                                # الموديل أنهى التفكير، نأخذ ما بعد الـ </think> للعرض
+                                parts = full_resp.split("</think>")
+                                display_resp = parts[-1].strip()
                             # حفظ التفكير في الـ session_state
-                            try:
-                                st.session_state.agent_thinking = full_resp.split("<think>")[-1].split("</think>")[0].strip()
-                            except:
-                                pass
-                        else:
+                                try:
+                                    st.session_state.agent_thinking = full_resp.split("<think>")[-1].split("</think>")[0].strip()
+                                except:
+                                    pass
+                            else:
                             # الموديل ما زال يفكر بالداخل، لا تعرض شيء للمستخدم حالياً
-                            display_resp = ""
-                    else:
-                        # الموديل لم يستخدم وسوم تفكير إطلاقاً، اعرض النص بالكامل مباشرة
-                        display_resp = full_resp.strip()
+                                display_resp = ""
+                        else:
+                            # الموديل لم يستخدم وسوم تفكير إطلاقاً، اعرض النص بالكامل مباشرة
+                            display_resp = full_resp.strip()
                     
-                    # تخطي التحديث إذا كان النص فارغاً لمنع وميض الواجهة
-                    if not display_resp:
-                        continue
+                        # تخطي التحديث إذا كان النص فارغاً لمنع وميض الواجهة
+                        if not display_resp:
+                            continue
 
-                    # 🎯 تحديث الشاشة فوراً بداخل الـ Cover الاحترافي الموحد
-                    if is_arabic_line(display_resp):
-                        placeholder.markdown(
-                            f"""
-                            <div style="
-                                background: #1E2330; 
-                                border: 1px solid rgba(255, 255, 255, 0.05); 
-                                border-radius: 12px; 
-                                padding: 20px; 
-                                margin-bottom: 15px; 
-                                direction: rtl; 
-                                text-align: right; 
-                                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-                            ">
-                                <span style="background: #10B981; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 10px; display: inline-block;">الرد الذكي ✨</span>
-                                <div style="color: #FFFFFF !important; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">{display_resp}</div>
-                            </div>
-                            """, 
-                            unsafe_allow_html=True
-                        )
-                    else:
-                        placeholder.markdown(
-                            f"""
-                            <div style="
-                                background: #1E2330; 
-                                border: 1px solid rgba(255, 255, 255, 0.05); 
-                                border-radius: 12px; 
-                                padding: 20px; 
-                                margin-bottom: 15px; 
-                                direction: ltr; 
-                                text-align: left; 
-                                box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
-                            ">
-                                <span style="background: #3B82F6; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 10px; display: inline-block;">AI Response ✨</span>
-                                <div style="color: #FFFFFF !important; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">{display_resp}</div>
-                            </div>
-                            """, 
-                            unsafe_allow_html=True
-                        )
-            
+                        # 🎯 تحديث الشاشة فوراً بداخل الـ Cover الاحترافي الموحد
+                        if is_arabic_line(display_resp):
+                            placeholder.markdown(
+                                f"""
+                                <div style="
+                                    background: #1E2330; 
+                                    border: 1px solid rgba(255, 255, 255, 0.05); 
+                                    border-radius: 12px; 
+                                    padding: 20px; 
+                                    margin-bottom: 15px; 
+                                    direction: rtl; 
+                                    text-align: right; 
+                                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                                ">
+                                    <span style="background: #10B981; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 10px; display: inline-block;">الرد الذكي ✨</span>
+                                    <div style="color: #FFFFFF !important; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">{display_resp}</div>
+                                </div>
+                                """, 
+                                unsafe_allow_html=True
+                            )
+                        else:
+                            placeholder.markdown(
+                                f"""
+                                <div style="
+                                    background: #1E2330; 
+                                    border: 1px solid rgba(255, 255, 255, 0.05); 
+                                    border-radius: 12px; 
+                                    padding: 20px; 
+                                    margin-bottom: 15px; 
+                                    direction: ltr; 
+                                    text-align: left; 
+                                    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+                                ">
+                                    <span style="background: #3B82F6; color: white; padding: 2px 8px; border-radius: 6px; font-size: 11px; font-weight: bold; margin-bottom: 10px; display: inline-block;">AI Response ✨</span>
+                                    <div style="color: #FFFFFF !important; white-space: pre-wrap; font-size: 15px; line-height: 1.6;">{display_resp}</div>
+                                </div>
+                                """, 
+                                unsafe_allow_html=True
+                            )
+            except Exception as e:
+                print(e)
+                st.error(e)
             # حساب الإخراج النهائي النظيف تماماً
             final_clean = full_resp if "</think>" not in full_resp else full_resp.split("</think>")[-1].strip()
             
