@@ -24,23 +24,23 @@ mcp = FastMCP("stock-ai-tools")
 async def save_kayfa_crm_lead(
     customer_name: str,
     phone: str,
-    email: str,
-    city: str,
     current_level: str,
-    products_of_interest: str,
-    goal: str,
-    conversation_summary: str
+    email: str = "لم يذكر بعد",
+    city: str = "غير محدد",
+    products_of_interest: str = "منصة كيف التعليمية",
+    goal: str = "تطوير المهارات التقنية",
+    conversation_summary: str = "استفسار أولي وتجميع بيانات التواصل الأساسية"
 ) -> str:
     """
-    Use this tool to save a qualified customer lead/ticket into MongoDB CRM Atlas 
-    whenever the user provides their contact info (Name, Phone/WhatsApp, Email, City) 
-    or exhibits strong buying signals for Kayfa programs.
+    Use this tool to save a qualified customer lead into MongoDB CRM Atlas 
+    as soon as the user provides their core credentials: Username, Level, and Phone number.
     """
     try:
-        # الرابط الصريح والمؤمن لقاعدة البيانات الخاصة بك
-        mongo_uri = "mongodb+srv://elhosenyhassan007_db_user:jLPu7mYfy8Jyox0u@cluster0.x5jk1ox.mongodb.net/"
+        mongo_uri = "mongodb+srv://kayfa_admin:KayfaSecure2026@cluster0.x5jk1ox.mongodb.net/"
+        # الربط المباشر بالكليستر بتاعك المعروض في الصورة
         client = MongoClient(mongo_uri, tlsCAFile=certifi.where())
         
+        # بايثون هيقوم بإنشاء الـ Database والـ Collection دي أوتوماتيكياً في الأطلس لو مش موجودين!
         db = client["kayfa_crm"]
         tickets_collection = db["crm_tickets"]
         
@@ -59,8 +59,8 @@ async def save_kayfa_crm_lead(
             },
             "sales_signals": {
                 "lead_temperature": "hot",       
-                "buying_signals": "العميل ترك بياناته طواعية للتواصل الفوري ومتابعة الحجز",
-                "objections_handled": "تم توجيهه وتوضيح تفاصيل دبلومات منصة كيف الفاخرة"
+                "buying_signals": "العميل سجل بياناته الأساسية (الاسم، الهاتف، المستوى) بنجاح",
+                "objections_handled": "تم الالتقاط الأوتوماتيكي الفوري لبدء المتابعة مبيعاتياً"
             },
             "conversation_metadata": {
                 "summary_ar": conversation_summary,      
@@ -73,7 +73,6 @@ async def save_kayfa_crm_lead(
         
     except Exception as e:
         return f"❌ Failed to save lead to MongoDB CRM: {str(e)}"
-        
 @mcp.tool()
 async def get_stock_info(symbol: str) -> str:
     """Get basic information and current price for a stock symbol"""
